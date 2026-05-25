@@ -723,23 +723,50 @@ export default function CleanSuperAdminPortal() {
           </button>
         </div>
 
-        {/* User Footer Profile */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '20px' }}>
-          <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '50%',
-            background: 'var(--primary)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            fontWeight: 'bold',
-            fontSize: '0.875rem'
-          }}>PP</div>
-          <div>
-            <h4 style={{ fontSize: '0.875rem', fontWeight: 600 }}>Super Admin</h4>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>License Managed</span>
+        {/* User Footer Profile & Secure Logout */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: 'var(--primary)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              fontWeight: 'bold',
+              fontSize: '0.875rem'
+            }}>PP</div>
+            <div>
+              <h4 style={{ fontSize: '0.875rem', fontWeight: 600 }}>Super Admin</h4>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>License Managed</span>
+            </div>
           </div>
+          <button
+            onClick={() => {
+              if (confirm('Are you sure you want to securely close the PlatePixels Admin session and log out?')) {
+                window.location.href = '/';
+              }
+            }}
+            style={{
+              width: '100%',
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid var(--danger)',
+              borderRadius: '8px',
+              color: '#fca5a5',
+              padding: '10px 16px',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.875rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              transition: 'var(--transition-smooth)'
+            }}
+          >
+            <span>🚪</span> Secure Sign Out
+          </button>
         </div>
       </div>
 

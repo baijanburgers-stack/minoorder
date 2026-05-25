@@ -189,9 +189,34 @@ export default function StoreAdminMenuPage() {
           </h1>
           <p style={{ color: 'var(--text-secondary)' }}>MinoOrder Restaurant Catalog & Proportional VAT Combo Engine Sandbox</p>
         </div>
-        <div className="glass-card" style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--accent)' }} />
-          <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Active Menu Snapshot: Version 5</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="glass-card" style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--accent)' }} />
+            <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Active Menu Snapshot: Version 5</span>
+          </div>
+          <button
+            onClick={() => {
+              if (confirm('Are you sure you want to securely log out and clear the active store session?')) {
+                window.location.href = '/';
+              }
+            }}
+            style={{
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid var(--danger)',
+              borderRadius: '8px',
+              color: '#fca5a5',
+              padding: '10px 16px',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.875rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'var(--transition-smooth)'
+            }}
+          >
+            <span>🚪</span> Logout
+          </button>
         </div>
       </div>
 
