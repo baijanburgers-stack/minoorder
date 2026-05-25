@@ -81,7 +81,6 @@ class OfflineSyncEngine {
     _statusController.add('Beginning outbox synchronization of ${pending.length} orders...');
 
     for (var order in pending) {
-      bool success = false;
       try {
         _statusController.add('Syncing order ID: ${order.orderId} (Retry: ${order.retryCount})...');
         
@@ -92,12 +91,10 @@ class OfflineSyncEngine {
         if (response['statusCode'] == 201 || response['statusCode'] == 200) {
           // 201 Created or 200 OK (Duplicate transaction skipped safely on server)
           order.syncStatus = 'synced';
-          success = true;
           _statusController.add('✔️ Order ${order.orderId} synced successfully.');
         } else if (response['statusCode'] == 400) {
           // 400 Bad Request: client validation failure (do not retry, flags for store operator)
           order.syncStatus = 'failed_validation';
-          success = true; // Mark done to unblock queue, held in errors tab
           _statusController.add('❌ Order ${order.orderId} validation failed. Held for operator review.');
         } else {
           // 500 Server Error or timeout

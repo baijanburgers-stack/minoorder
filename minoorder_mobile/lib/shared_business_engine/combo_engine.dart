@@ -96,7 +96,6 @@ class ComboEngine {
     double discountRatio = totalNormalPrice > 0 ? (totalDiscount / totalNormalPrice) : 0.0;
 
     List<AllocatedComboItemResult> allocatedItems = [];
-    double calculatedTotalGross = 0.0;
     double calculatedTotalNet = 0.0;
     double calculatedTotalVat = 0.0;
 
@@ -138,7 +137,6 @@ class ComboEngine {
         ),
       );
 
-      calculatedTotalGross += allocatedGross;
       calculatedTotalNet += vatCalculation.net;
       calculatedTotalVat += vatCalculation.vatAmount;
     }

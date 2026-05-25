@@ -1,9 +1,6 @@
 // receipt_engine.dart
 // Production-grade Multi-Printer Receipt & ESC/POS Formatting Engine for MinoOrder
 
-import 'vat_engine.dart';
-import 'combo_engine.dart';
-
 class ReceiptLineItem {
   final String name;
   final int quantity;

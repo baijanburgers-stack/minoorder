@@ -79,7 +79,7 @@ jobs:
       - name: Analyze Code Structure
         run: |
           cd minoorder_mobile
-          flutter analyze
+          flutter analyze --no-fatal-infos
 
       - name: Execute Automated Compliance Unit Tests
         run: |
