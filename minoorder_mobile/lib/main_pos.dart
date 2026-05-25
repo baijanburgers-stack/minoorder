@@ -1,4 +1,4 @@
-import 'package:flutter/material';
+import 'package:flutter/material.dart';
 import 'shared_business_engine/vat_engine.dart';
 import 'shared_business_engine/receipt_engine.dart';
 
@@ -206,7 +206,7 @@ class _PosDashboardScreenState extends State<PosDashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.between,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
                       'FDM FISCAL TICKET SIGNED',
@@ -379,7 +379,7 @@ class _PosDashboardScreenState extends State<PosDashboardScreen> {
                           style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                         ),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.between,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
                               item.categoryName.toUpperCase(),
@@ -441,7 +441,7 @@ class _PosDashboardScreenState extends State<PosDashboardScreen> {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.between,
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
                                       Expanded(
                                         child: Column(
@@ -543,7 +543,7 @@ class _PosDashboardScreenState extends State<PosDashboardScreen> {
                   const SizedBox(height: 20),
                   
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.between,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('Total (VAT Incl)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                       Text(

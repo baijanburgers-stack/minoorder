@@ -1,4 +1,4 @@
-import 'package:flutter/material';
+import 'package:flutter/material.dart';
 import 'shared_business_engine/vat_engine.dart';
 import 'shared_business_engine/combo_engine.dart';
 import 'shared_business_engine/receipt_engine.dart';
@@ -82,8 +82,12 @@ class KioskIdleScreen extends StatelessWidget {
                 height: 300,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFF6366F1).withOpacity(0.08),
-                  blurRadius: 80,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF6366F1).withOpacity(0.08),
+                      blurRadius: 80,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -412,7 +416,7 @@ class _KioskCatalogScreenState extends State<KioskCatalogScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Row(
-                  mainAxisAlignment: MainAxisAlignment.between,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('KIOSK ADMIN CONTROL CONSOLE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     Icon(Icons.lock_open, color: Color(0xFF10B981)),
@@ -474,7 +478,7 @@ class _KioskCatalogScreenState extends State<KioskCatalogScreen> {
               children: [
                 // Header
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.between,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -600,7 +604,6 @@ class _KioskCatalogScreenState extends State<KioskCatalogScreen> {
 
     showDialog(
       context: context,
-      borderPointless: true, // Custom placeholder mapping
       barrierDismissible: false,
       builder: (context) {
         return _KioskPaymentTerminalSimulator(
@@ -786,7 +789,7 @@ class _KioskCatalogScreenState extends State<KioskCatalogScreen> {
                                   ],
                                 ),
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.between,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text('WIZARD SETUP', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70)),
                                     Text('€ 12.00', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
@@ -831,7 +834,7 @@ class _KioskCatalogScreenState extends State<KioskCatalogScreen> {
                                 ],
                               ),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.between,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(product.category.name.toUpperCase(), style: const TextStyle(fontSize: 9, color: Colors.white38, fontWeight: FontWeight.bold)),
                                   Text('€ ${product.price.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, color: Color(0xFF10B981), fontWeight: FontWeight.bold)),
@@ -883,7 +886,7 @@ class _KioskCatalogScreenState extends State<KioskCatalogScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.between,
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
                                           Expanded(child: Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
                                           Text('€ ${item.price.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF10B981))),
@@ -914,7 +917,7 @@ class _KioskCatalogScreenState extends State<KioskCatalogScreen> {
                   ),
                   const Divider(height: 32, color: Colors.white10),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.between,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('TOTAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                       Text('€ ${cartTotal.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22, color: Color(0xFF10B981))),
