@@ -1,0 +1,1270 @@
+================================================================================
+                     MINOORDER ENTERPRISE SAAS PLATFORM
+               SYSTEM ARCHITECTURE, DATABASE SCHEMA & DEV PLAN
+================================================================================
+Document Version: 1.0.0
+Author: Principal Enterprise Architect, PlatePixels
+Target Domain: minoorder.com
+Classification: Confidential - Developer Blueprint
+================================================================================
+
+This document serves as the master engineering blueprint and implementation plan 
+for MinoOrder, a production-grade, multi-tenant restaurant SaaS platform owned by 
+PlatePixels. 
+
+MinoOrder comprises:
+1. A Next.js Web Back Office containing a PlatePixels Super Admin portal and a 
+   Store Admin portal.
+2. A Flutter Android application supporting POS Mode and Self-Ordering Kiosk Mode.
+3. A Supabase Backend utilizing PostgreSQL, Auth, Realtime, Storage, Edge Functions, 
+   and Row Level Security (RLS).
+4. Shared Business Engines built with a pluggable, compliance-first, and 
+   offline-tolerant architecture tailored for Belgium (VAT/FDM compliance) and 
+   scalable to European markets.
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. ARCHITECTURAL BLUEPRINT & COMPONENT INVENTORY
+2. THE 8 CORE SHARED BUSINESS ENGINES
+3. PRODUCTION-GRADE POSTGRESQL / SUPABASE DATABASE SCHEMA (DDL)
+4. ROW-LEVEL SECURITY (RLS) POLICIES
+5. SECURE EDGE FUNCTIONS & API CONTRACTS
+6. PROJECT DIRECTORY STRUCTURES (NEXT.JS & FLUTTER)
+7. UI SCREEN INVENTORY
+8. COMPREHENSIVE USER STORIES (GHERKIN ACCEPTANCE CRITERIA)
+9. DEVOPS, DEPLOYMENT, & OBSERVABILITY STRATEGY
+10. 6-SPRINT IMPLEMENTATION ROADMAP
+11. ENTERPRISE RISK REGISTER & MITIGATION STRATEGIES
+12. BELGIUM FDM COMPLIANCE GO-LIVE & EUROPEAN EXPANSION CHECKLISTS
+
+================================================================================
+1. ARCHITECTURAL BLUEPRINT & COMPONENT INVENTORY
+================================================================================
+
+The architecture of MinoOrder enforces strict separation of concerns, multi-tenant 
+isolation at the database layer via PostgreSQL Row Level Security (RLS), and a 
+shared business engine logic across clients to prevent duplication and drift.
+
+                          +-------------------------------------------------+
+                          |            Next.js Web Back Office              |
+                          |  +-------------------+  +--------------------+  |
+                          |  | PlatePixels Super |  |    Store Admin     |  |
+                          |  |   Admin Portal    |  |       Portal       |  |
+                          |  +-------------------+  +--------------------+  |
+                          +-------------------------------------------------+
+                                                   |
+                                                   v
++-----------------------+              +-----------------------+
+|  Flutter POS Client   |              | Flutter Kiosk Client  |
+|  (Cashier, Shifts,    |              |  (Customer Facing,    |
+|   Split Pay, Printers)|              |   Upsell, Terminals)  |
++-----------------------+              +-----------------------+
+           |                                       |
+           +-------------------+-------------------+
+                               |
+                               v
+               +-------------------------------+
+               |    Shared Business Engines    |
+               | (VAT, Combo, Receipt, Fiscal) |
+               +-------------------------------+
+                               |
+            HTTPS / WSS        v
+      +---------------------------------------------------------+
+      |                   Supabase Backend                      |
+      |  +------------------+  +-----------------------------+  |
+      |  |  Supabase Auth   |  | Supabase Realtime (Sockets) |  |
+      |  +------------------+  +-----------------------------+  |
+      |  +------------------+  +-----------------------------+  |
+      |  |  Edge Functions  |  |     Supabase Storage        |  |
+      |  | (Secure Operations) | (Menu Images, Invoices, etc)|  |
+      |  +------------------+  +-----------------------------+  |
+      |  +---------------------------------------------------+  |
+      |  |              PostgreSQL Database                  |  |
+      |  |  - Strict Multi-Tenant Schema                     |  |
+      |  |  - Row Level Security (RLS)                       |  |
+      |  |  - Read Replicas (for Reporting Scale)            |  |
+      |  +---------------------------------------------------+  |
+      +---------------------------------------------------------+
+                               |
+             API Integrations  |
+      +------------------------+-------------------------------+
+      |                        |                               |
+      v                        v                               v
++------------+          +------------+                  +--------------+
+| Payment    |          | Fiscal     |                  | Hardware     |
+| Terminals  |          | Providers  |                  | Abstractions |
+| (CCV,      |          | (Fiskaly,  |                  | (Star, Epson,|
+| Payconiq)  |          | Checkbox)  |                  | Sunmi SDKs)  |
++------------+          +------------+                  +--------------+
+
+================================================================================
+2. THE 8 CORE SHARED BUSINESS ENGINES
+================================================================================
+
+To ensure consistency across the Next.js Back Office, Flutter POS, and Flutter 
+Kiosk, we design 8 core logic engines. In the Flutter application, these engines 
+reside in a shared Dart package (`shared_business_engine`), while the Back Office 
+and server-side layers align with these exact rules implemented in TypeScript/SQL.
+
+--------------------------------------------------------------------------------
+2.1. VAT Engine
+--------------------------------------------------------------------------------
+The VAT Engine is a zero-hardcoding component that computes tax based on three 
+dimensions: Country, Service Type (Dine-in vs. Takeaway), and Product Type (Food, 
+Soft Drinks, Alcohol, Services).
+
+- Takeaway rules (e.g., Belgium): Food & soft drinks are taxed at 6%; alcoholic 
+  beverages are taxed at 21%.
+- Dine-in rules (e.g., Belgium): Food & soft drinks are taxed at 12% (excluding 
+  certain luxury items); alcohol is taxed at 21%.
+- Formula for extracting VAT from Gross Price (since menus are defined as gross 
+  VAT-inclusive):
+  
+  Net Price = Gross Price / (1 + VAT_Rate)
+  VAT Amount = Gross Price - Net Price
+
+- Basket Split: When an order is placed, the engine groups items by VAT rules and 
+  applies separate sub-calculations to ensure compliance reporting.
+
+--------------------------------------------------------------------------------
+2.2. Combo Engine
+--------------------------------------------------------------------------------
+The Combo Engine manages composite menu items. A combo contains components (e.g., 
+Burger, Fries, Drink) sold at a fixed, discounted package price (P_combo). To 
+prevent tax evasion disputes, discounts must be allocated proportionally across 
+the VAT rates of the combo components.
+
+Proportional Discount Allocation Algorithm:
+1. Let individual components purchased separately be C_1, C_2, ... C_n.
+2. Let the normal gross prices be P_1, P_2, ... P_n.
+3. Calculate Total Normal Price: P_total_normal = SUM(P_i).
+4. Calculate Total Combo Discount: Discount_total = P_total_normal - P_combo.
+5. Discount Ratio: R = Discount_total / P_total_normal.
+6. For each component i:
+   - Discounted Gross Price (P'_i) = P_i * (1 - R).
+   - Fetch the VAT rate (V_i) applicable to component i (based on Dine-in / Takeaway).
+   - Net Price (Net_i) = P'_i / (1 + V_i).
+   - Component VAT (VAT_i) = P'_i - Net_i.
+7. Sum(P'_i) will exactly equal P_combo, and VAT is distributed legally.
+
+--------------------------------------------------------------------------------
+2.3. Receipt & Printing Engine
+--------------------------------------------------------------------------------
+This engine translates abstract receipt models into raw ESC/POS command sequences 
+compatible with Star, Epson, and Sunmi printers.
+- Design: The client constructs a generic `ReceiptDocument` tree (Header, 
+  LineItems, VATSummary, FiscalSignatureBlock, Barcode, Footer).
+- Adapters:
+  - `EpsonPrinterAdapter`: Converts `ReceiptDocument` to Epson ESC/POS.
+  - `StarPrinterAdapter`: Converts `ReceiptDocument` to Star Line-mode/StarPRNT.
+  - `SunmiPrinterAdapter`: Interfaces with the internal Sunmi Android SDK.
+- The Engine supports multi-destination routing: orders are parsed, and prep 
+  tickets are routed to the specific IP or USB kitchen printers configured for 
+  those item categories.
+
+--------------------------------------------------------------------------------
+2.4. Fiscal Engine
+--------------------------------------------------------------------------------
+The Fiscal Engine handles legal compliance for logging and signing transactions. 
+It is abstract and pluggable, supporting digital signatures or physical hardware 
+modules.
+- Interface:
+  ```dart
+  abstract class FiscalProvider {
+    Future<FiscalSignature> signOrder(Order order, Tenant tenant, Store store);
+    Future<FiscalReport> generateXReport(Shift shift);
+    Future<FiscalReport> generateZReport(Shift shift);
+  }
+  ```
+- Providers:
+  1. `SimulatorProvider`: Used in Dev/Staging for testing without calling APIs.
+  2. `CheckboxProvider`: Integrates with the Checkbox.ua API (or similar digital 
+     RRO platforms).
+  3. `FiskalyProvider`: Connects to Fiskaly Cloud TSS (Germany/EU compliant).
+  4. `FdmProvider`: Integrates with the physical Belgium Fiscal Data Module (FDM) 
+     "black box" over serial/IP.
+
+--------------------------------------------------------------------------------
+2.5. Payment Engine
+--------------------------------------------------------------------------------
+Manages payments across local terminals and cloud interfaces.
+- Integrations:
+  - Adyen & Stripe Terminal Cloud APIs (for modern payment terminals).
+  - Bancontact / Payconiq Cloud & Local APIs (Belgium specific).
+- Features:
+  - Split Payments: The engine accepts multiple transaction objects per order 
+    (e.g., Cash + Card + Payconiq).
+  - Status Reconciliation: Realtime webhooks update the transaction status. If a 
+    terminal handshake times out, the local app triggers a manual reconciliation 
+    flow requesting status directly from the terminal provider using the unique 
+    reference.
+
+--------------------------------------------------------------------------------
+2.6. Reporting Engine
+--------------------------------------------------------------------------------
+Processes shifts, cash levels, and tax audits.
+- X-Report: Generates a mid-day financial summary without resetting the counters.
+- Z-Report: Generates the end-of-day financial audit, signs it fiscally, writes it 
+  to the ledger, and resets shift/daily sales counters.
+- Breakdown: Calculations are grouped by Payment Method (Cash, Card, Digital), 
+  VAT Rule (6%, 12%, 21%), and Category.
+
+--------------------------------------------------------------------------------
+2.7. Offline Sync Engine
+--------------------------------------------------------------------------------
+Ensures uninterrupted service when internet connectivity drops.
+- SQLite/Sembast Database: Locally persists all menu snapshots, active carts, and 
+  signed orders.
+- Queue-Based Synchronization:
+  - Completed offline orders are marked as `pending_sync` and queued in a local 
+    outbox.
+  - An idempotency token (UUID) is generated when the order is created.
+  - When connection is restored, a worker processes the outbox sequentially, 
+    submitting each order to Supabase via edge functions.
+  - Server-side validation checks the database for existing orders with the same 
+    UUID. If a conflict occurs, it skips duplication and returns success, 
+    resolving network retry duplication issues.
+
+--------------------------------------------------------------------------------
+2.8. Device Engine
+--------------------------------------------------------------------------------
+Handles security, provisioning, and status reporting of Kiosk and POS terminals.
+- Device Binding: On first boot, the hardware UUID is registered. A Super Admin 
+  must authorize the binding and issue a JWT representing the `device_role`.
+- License Heartbeat: Every 60 seconds, active devices emit a light ping to 
+  Supabase Realtime, updating their status and verifying subscription status.
+
+================================================================================
+3. PRODUCTION-GRADE POSTGRESQL / SUPABASE DATABASE SCHEMA (DDL)
+================================================================================
+
+This is the complete, production-grade schema DDL. It enforces relational integrity, 
+foreign key cascading, constraints, and indices for query performance.
+
+```sql
+-- Enable UUID and GIS extensions
+create extension if not exists "uuid-ossp";
+
+-- Define Custom Custom Enums
+create type user_role as enum ('super_admin', 'store_admin', 'cashier', 'kitchen', 'device');
+create type order_status as enum ('draft', 'pending', 'paid', 'preparing', 'ready', 'completed', 'cancelled', 'refunded');
+create type payment_method as enum ('cash', 'card', 'bancontact', 'payconiq', 'split');
+create type payment_status as enum ('pending', 'authorized', 'captured', 'failed', 'refunded');
+create type device_type as enum ('pos', 'kiosk');
+create type vat_category as enum ('food', 'soft_drink', 'alcohol', 'service');
+
+-- 1. Tenants Table (PlatePixels clients/restaurant chains)
+create table tenants (
+    id uuid primary key default uuid_generate_v4(),
+    name varchar(255) not null,
+    domain varchar(255) unique,
+    billing_email varchar(255) not null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 2. Stores Table (Individual Restaurant Locations)
+create table stores (
+    id uuid primary key default uuid_generate_v4(),
+    tenant_id uuid not null references tenants(id) on delete cascade,
+    name varchar(255) not null,
+    company_name varchar(255) not null,
+    vat_number varchar(50) not null,
+    street varchar(255) not null,
+    city varchar(100) not null,
+    postal_code varchar(20) not null,
+    country varchar(2) not null default 'BE',
+    phone varchar(50),
+    email varchar(255),
+    opening_hours jsonb, -- Map of day of week to opening/closing times
+    theme_settings jsonb default '{}'::jsonb,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 3. Profiles Table (Linked to Supabase Auth)
+create table profiles (
+    id uuid primary key references auth.users(id) on delete cascade,
+    first_name varchar(100),
+    last_name varchar(100),
+    phone varchar(50),
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 4. Store Users mapping (Roles within specific stores)
+create table store_users (
+    id uuid primary key default uuid_generate_v4(),
+    tenant_id uuid not null references tenants(id) on delete cascade,
+    store_id uuid not null references stores(id) on delete cascade,
+    user_id uuid not null references profiles(id) on delete cascade,
+    role user_role not null default 'cashier',
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique(store_id, user_id)
+);
+
+-- 5. Devices Table (POS and Kiosk terminals)
+create table devices (
+    id uuid primary key default uuid_generate_v4(),
+    tenant_id uuid not null references tenants(id) on delete cascade,
+    store_id uuid not null references stores(id) on delete cascade,
+    name varchar(100) not null,
+    hardware_uuid varchar(255) not null unique,
+    type device_type not null,
+    is_authorized boolean not null default false,
+    last_heartbeat timestamp with time zone,
+    configuration jsonb default '{}'::jsonb,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 6. VAT Rules Table
+create table vat_rules (
+    id uuid primary key default uuid_generate_v4(),
+    country varchar(2) not null default 'BE',
+    category vat_category not null,
+    takeaway_rate numeric(5,2) not null, -- e.g., 6.00
+    dine_in_rate numeric(5,2) not null,  -- e.g., 12.00 or 21.00
+    description varchar(255),
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique(country, category)
+);
+
+-- 7. Categories Table
+create table categories (
+    id uuid primary key default uuid_generate_v4(),
+    store_id uuid not null references stores(id) on delete cascade,
+    name jsonb not null, -- Multilingual names: {"en": "Burgers", "nl": "Burgers", "fr": "Burgers"}
+    description jsonb,
+    sort_order integer not null default 0,
+    is_visible_pos boolean not null default true,
+    is_visible_kiosk boolean not null default true,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 8. Subcategories Table
+create table subcategories (
+    id uuid primary key default uuid_generate_v4(),
+    category_id uuid not null references categories(id) on delete cascade,
+    name jsonb not null,
+    sort_order integer not null default 0,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 9. Items Table (Products)
+create table items (
+    id uuid primary key default uuid_generate_v4(),
+    store_id uuid not null references stores(id) on delete cascade,
+    subcategory_id uuid references subcategories(id) on delete set null,
+    category_id uuid not null references categories(id) on delete cascade,
+    name jsonb not null, -- Multilingual
+    description jsonb,
+    image_url varchar(1024),
+    gross_price numeric(10,2) not null, -- Inclusive of VAT
+    vat_rule_id uuid not null references vat_rules(id),
+    is_available boolean not null default true,
+    availability_schedule jsonb, -- Time slots of availability
+    is_draft boolean not null default true,
+    sort_order integer not null default 0,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 10. Modifier Groups Table
+create table modifier_groups (
+    id uuid primary key default uuid_generate_v4(),
+    store_id uuid not null references stores(id) on delete cascade,
+    name jsonb not null,
+    min_selection integer not null default 0,
+    max_selection integer not null default 1,
+    is_required boolean not null default false,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 11. Modifier Options Table
+create table modifier_options (
+    id uuid primary key default uuid_generate_v4(),
+    modifier_group_id uuid not null references modifier_groups(id) on delete cascade,
+    name jsonb not null,
+    gross_price numeric(10,2) not null default 0.00,
+    vat_rule_id uuid not null references vat_rules(id),
+    is_available boolean not null default true,
+    sort_order integer not null default 0
+);
+
+-- Joint table to link items with modifier groups
+create table item_modifier_groups (
+    item_id uuid not null references items(id) on delete cascade,
+    modifier_group_id uuid not null references modifier_groups(id) on delete cascade,
+    sort_order integer not null default 0,
+    primary key (item_id, modifier_group_id)
+);
+
+-- 12. Combos Table (Fixed-price bundle rules)
+create table combos (
+    id uuid primary key default uuid_generate_v4(),
+    store_id uuid not null references stores(id) on delete cascade,
+    name jsonb not null,
+    description jsonb,
+    image_url varchar(1024),
+    fixed_price numeric(10,2) not null,
+    is_available boolean not null default true,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 13. Combo Components Table (Groups of choices inside a combo, e.g. "Select a drink")
+create table combo_components (
+    id uuid primary key default uuid_generate_v4(),
+    combo_id uuid not null references combos(id) on delete cascade,
+    name jsonb not null, -- E.g. {"en": "Choose a main"}
+    min_selection integer not null default 1,
+    max_selection integer not null default 1,
+    sort_order integer not null default 0
+);
+
+-- Junction table to associate items allowed in a combo component
+create table combo_component_items (
+    combo_component_id uuid not null references combo_components(id) on delete cascade,
+    item_id uuid not null references items(id) on delete cascade,
+    additional_gross_price numeric(10,2) not null default 0.00, -- Upcharge
+    primary key (combo_component_id, item_id)
+);
+
+-- 14. Menu Snapshots Table (Immutable published states)
+create table menu_snapshots (
+    id uuid primary key default uuid_generate_v4(),
+    store_id uuid not null references stores(id) on delete cascade,
+    version integer not null,
+    snapshot jsonb not null, -- Giant serialized JSON of published categories, items, combos, modifiers
+    published_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 15. Shifts Table (POS Cashier Sessions)
+create table shifts (
+    id uuid primary key default uuid_generate_v4(),
+    store_id uuid not null references stores(id) on delete cascade,
+    device_id uuid not null references devices(id),
+    user_id uuid not null references profiles(id),
+    opened_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    closed_at timestamp with time zone,
+    opening_cash numeric(10,2) not null,
+    closing_cash numeric(10,2),
+    expected_closing_cash numeric(10,2),
+    is_fiscally_signed boolean not null default false,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 16. Orders Table
+create table orders (
+    id uuid primary key default uuid_generate_v4(), -- Idempotency token sent by client
+    store_id uuid not null references stores(id) on delete cascade,
+    device_id uuid not null references devices(id),
+    shift_id uuid references shifts(id),
+    order_number varchar(50) not null, -- Sequential daily code (e.g. K-01, POS-42)
+    is_takeaway boolean not null default false,
+    status order_status not null default 'pending',
+    total_gross numeric(10,2) not null,
+    total_net numeric(10,2) not null,
+    total_vat numeric(10,2) not null,
+    customer_notes text,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Index for fast daily statistics and list fetches
+create index idx_orders_store_created on orders(store_id, created_at desc);
+
+-- 17. Order Lines Table
+create table order_lines (
+    id uuid primary key default uuid_generate_v4(),
+    order_id uuid not null references orders(id) on delete cascade,
+    item_id uuid references items(id) on delete set null,
+    combo_id uuid references combos(id) on delete set null,
+    name varchar(255) not null, -- Snapshotted name at purchase
+    quantity integer not null default 1,
+    unit_gross numeric(10,2) not null,
+    unit_net numeric(10,2) not null,
+    unit_vat numeric(10,2) not null,
+    vat_rate numeric(5,2) not null, -- Snapshot rate (e.g., 6.00)
+    combo_discount_allocated numeric(10,2) default 0.00
+);
+
+-- 18. Order Line Modifiers Table
+create table order_line_modifiers (
+    id uuid primary key default uuid_generate_v4(),
+    order_line_id uuid not null references order_lines(id) on delete cascade,
+    modifier_option_id uuid references modifier_options(id) on delete set null,
+    name varchar(255) not null,
+    quantity integer not null default 1,
+    unit_gross numeric(10,2) not null default 0.00,
+    unit_net numeric(10,2) not null default 0.00,
+    unit_vat numeric(10,2) not null default 0.00,
+    vat_rate numeric(5,2) not null
+);
+
+-- 19. Payments Table
+create table payments (
+    id uuid primary key default uuid_generate_v4(),
+    order_id uuid not null references orders(id) on delete cascade,
+    method payment_method not null,
+    status payment_status not null default 'pending',
+    amount numeric(10,2) not null,
+    transaction_reference varchar(255), -- E.g. card terminal trace ID
+    gateway_metadata jsonb,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 20. Receipts & Fiscal Signatures Table
+create table receipts (
+    id uuid primary key default uuid_generate_v4(),
+    order_id uuid not null references orders(id) on delete cascade,
+    receipt_number varchar(100) not null unique, -- Standardized legal format
+    fiscal_provider varchar(50) not null,        -- E.g. 'fiskaly', 'fdm'
+    fiscal_signature text not null,
+    fiscal_payload jsonb not null,               -- Raw values returned by provider
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 21. Printer Configurations
+create table printer_configs (
+    id uuid primary key default uuid_generate_v4(),
+    store_id uuid not null references stores(id) on delete cascade,
+    name varchar(100) not null,
+    connection_type varchar(50) not null, -- 'ip', 'usb', 'bluetooth'
+    address varchar(255) not null,         -- '192.168.1.200', '/dev/usb/lp0'
+    role varchar(50) not null default 'kitchen', -- 'receipt', 'kitchen', 'bar'
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 22. Audit Logs Table (Legally required system logging)
+create table audit_logs (
+    id uuid primary key default uuid_generate_v4(),
+    tenant_id uuid references tenants(id) on delete set null,
+    store_id uuid references stores(id) on delete set null,
+    user_id uuid references profiles(id) on delete set null,
+    action varchar(100) not null,
+    table_name varchar(100) not null,
+    row_id uuid,
+    old_value jsonb,
+    new_value jsonb,
+    ip_address varchar(45),
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 23. Subscriptions & Billing Table
+create table subscriptions (
+    id uuid primary key default uuid_generate_v4(),
+    tenant_id uuid not null references tenants(id) on delete cascade,
+    stripe_subscription_id varchar(255),
+    status varchar(50) not null default 'active',
+    plan_name varchar(100) not null,
+    expires_at timestamp with time zone,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 24. Billing Invoices
+create table billing_invoices (
+    id uuid primary key default uuid_generate_v4(),
+    tenant_id uuid not null references tenants(id) on delete cascade,
+    invoice_number varchar(100) not null,
+    amount numeric(10,2) not null,
+    vat_amount numeric(10,2) not null,
+    pdf_url varchar(1024),
+    paid_at timestamp with time zone,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 25. Fiscal Devices Table (Belgium FDM / digital black box status)
+create table fiscal_devices (
+    id uuid primary key default uuid_generate_v4(),
+    store_id uuid not null references stores(id) on delete cascade,
+    device_id uuid not null references devices(id) on delete cascade,
+    fdm_serial_number varchar(255) not null,
+    fdm_certificate_expiry date,
+    status varchar(50) not null default 'offline',
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 26. Fiscal Logs Table (Direct API calls log to audits)
+create table fiscal_logs (
+    id uuid primary key default uuid_generate_v4(),
+    store_id uuid not null references stores(id) on delete cascade,
+    device_id uuid not null references devices(id) on delete cascade,
+    request_type varchar(100) not null, -- 'sign_order', 'x_report', 'z_report'
+    payload jsonb not null,
+    response_status integer not null,
+    error_message text,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+```
+
+================================================================================
+4. ROW-LEVEL SECURITY (RLS) POLICIES
+================================================================================
+
+To enforce strict multi-tenant isolation, we enable Row Level Security on all 
+tables. Supabase reads the active authenticated user JWT (`auth.uid()`) to match 
+their tenant and role context.
+
+```sql
+-- Enable RLS across schemas
+alter table tenants enable row level security;
+alter table stores enable row level security;
+alter table store_users enable row level security;
+alter table devices enable row level security;
+alter table categories enable row level security;
+alter table items enable row level security;
+alter table orders enable row level security;
+alter table order_lines enable row level security;
+alter table payments enable row level security;
+alter table audit_logs enable row level security;
+
+-- Helper SQL Function: Extract Role for logged-in user at a specific store
+create or replace function get_user_role_for_store(store_id uuid)
+returns user_role as $$
+  select role from store_users 
+  where store_users.store_id = $1 
+    and store_users.user_id = auth.uid() 
+  limit 1;
+$$ language sql security definer;
+
+-- Helper SQL Function: Verify Tenant Association
+create or replace function is_tenant_member(tenant_id uuid)
+returns boolean as $$
+  select exists (
+    select 1 from store_users 
+    where store_users.tenant_id = $1 
+      and store_users.user_id = auth.uid()
+  );
+$$ language sql security definer;
+
+-- 4.1. Tenants RLS Policies
+create policy "Super Admin can manage all tenants"
+on tenants for all
+to authenticated
+using ( (select role from store_users where user_id = auth.uid() limit 1) = 'super_admin' );
+
+create policy "Tenant member can view own tenant profile"
+on tenants for select
+to authenticated
+using ( is_tenant_member(id) );
+
+-- 4.2. Stores RLS Policies
+create policy "Super Admin can write stores"
+on stores for all
+to authenticated
+using ( (select role from store_users where user_id = auth.uid() limit 1) = 'super_admin' );
+
+create policy "Store Admins and staff can view their own stores"
+on stores for select
+to authenticated
+using ( is_tenant_member(tenant_id) );
+
+create policy "Store Admins can update their own store settings"
+on stores for update
+to authenticated
+using ( get_user_role_for_store(id) = 'store_admin' )
+with check ( get_user_role_for_store(id) = 'store_admin' );
+
+-- 4.3. Menu Items RLS Policies
+create policy "Anonymous/Kiosk devices can select menu items for their store"
+on items for select
+to authenticated, anon
+using (
+    -- Authenticated staff, or Kiosk device role
+    exists (
+        select 1 from devices 
+        where devices.store_id = items.store_id 
+          and devices.is_authorized = true
+    ) 
+    or 
+    exists (
+        select 1 from store_users 
+        where store_users.store_id = items.store_id 
+          and store_users.user_id = auth.uid()
+    )
+);
+
+create policy "Store admins can edit items"
+on items for all
+to authenticated
+using ( get_user_role_for_store(store_id) = 'store_admin' );
+
+-- 4.4. Orders RLS Policies
+create policy "Devices and Staff can insert orders for their store"
+on orders for insert
+to authenticated
+with check (
+    exists (
+        select 1 from devices 
+        where devices.id = device_id 
+          and devices.store_id = store_id 
+          and devices.is_authorized = true
+    )
+    or
+    exists (
+        select 1 from store_users 
+        where store_users.store_id = store_id 
+          and store_users.user_id = auth.uid()
+    )
+);
+
+create policy "Staff and devices can read their store orders"
+on orders for select
+to authenticated
+using (
+    exists (
+        select 1 from store_users 
+        where store_users.store_id = store_id 
+          and store_users.user_id = auth.uid()
+    )
+    or
+    exists (
+        select 1 from devices 
+        where devices.id = device_id 
+          and devices.store_id = store_id
+    )
+);
+```
+
+================================================================================
+5. SECURE EDGE FUNCTIONS & API CONTRACTS
+================================================================================
+
+To protect sensitive operational rules, tax algorithms, and secrets (such as payment 
+keys or compliance credentials), critical transactions must happen server-side via 
+Supabase Edge Functions. Clients never directly calculate cart prices or contact 
+payment providers directly.
+
+--------------------------------------------------------------------------------
+5.1. Edge Function: `calculate-cart`
+--------------------------------------------------------------------------------
+Computes compliant taxes and combo proportional discount distributions.
+- **Protocol**: HTTPS POST
+- **Request Payload**:
+  ```json
+  {
+    "store_id": "8b5f36e4-4d89-4b35-8664-df8cbbf70a04",
+    "is_takeaway": true,
+    "items": [
+      {
+        "item_id": "a9ef387c-1234-4567-890a-bcdef0123456",
+        "quantity": 2,
+        "selected_modifiers": [
+          {
+            "modifier_option_id": "cf67c001-2090-48e0-bb12-990ffcc22112",
+            "quantity": 1
+          }
+        ]
+      }
+    ],
+    "combos": [
+      {
+        "combo_id": "ff87c223-9080-48e0-cc33-8877aacc1122",
+        "quantity": 1,
+        "selected_components": [
+          {
+            "component_id": "11aaccdd-1234-5678-9012-334455667788",
+            "item_id": "a9ef387c-1234-4567-890a-bcdef0123456",
+            "selected_modifiers": []
+          }
+        ]
+      }
+    ]
+  }
+  ```
+- **Response Payload**:
+  ```json
+  {
+    "total_gross": 29.50,
+    "total_net": 26.85,
+    "total_vat": 2.65,
+    "vat_summary": [
+      { "rate": 6.00, "net": 20.00, "vat": 1.20, "gross": 21.20 },
+      { "rate": 21.00, "net": 6.85, "vat": 1.45, "gross": 8.30 }
+    ],
+    "items": [
+      {
+        "name": "Standard Burger",
+        "quantity": 2,
+        "allocated_gross": 15.00,
+        "allocated_net": 14.15,
+        "allocated_vat": 0.85,
+        "vat_rate": 6.00
+      }
+    ]
+  }
+  ```
+
+--------------------------------------------------------------------------------
+5.2. Edge Function: `create-order`
+--------------------------------------------------------------------------------
+Processes safe order writing, locks menu snapshots, checks POS shifts, and returns 
+idempotent states.
+- **Protocol**: HTTPS POST
+- **Headers**: Include `X-Idempotency-Key` (UUID generated on client)
+- **Request Payload**: Same as `calculate-cart` payload with additional payment 
+  metadata:
+  ```json
+  {
+    "device_id": "55bbaadd-9900-44cc-bb11-887766554433",
+    "shift_id": "33224411-aabb-ccdd-eeff-001122334455",
+    "cart": { ... },
+    "payment_method": "bancontact"
+  }
+  ```
+
+--------------------------------------------------------------------------------
+5.3. Edge Function: `fiscal-sign-order`
+--------------------------------------------------------------------------------
+Acts as the central router for digital signature providers. Connects to 
+Fiskaly, Checkbox, or registers orders into the Belgium FDM middleware, securing 
+certificates outside the client’s reach.
+- **Protocol**: HTTPS POST
+- **Request Payload**:
+  ```json
+  {
+    "order_id": "ccddaa11-1234-5678-abcd-ef0123456789",
+    "fiscal_provider": "fiskaly"
+  }
+  ```
+- **Response Payload**:
+  ```json
+  {
+    "receipt_number": "BE-STORE01-20260525-0042",
+    "fiscal_signature": "SIG_a1b2c3d4e5f6g7h8i9j0_SHA256_FDM_BE",
+    "fiscal_payload": {
+      "timestamp": "2026-05-25T13:59:53Z",
+      "device_serial": "FDM-BE-887722",
+      "signature_counter": 1042,
+      "secure_hash": "23d5abf34d8ee590"
+    }
+  }
+  ```
+
+================================================================================
+6. PROJECT DIRECTORY STRUCTURES (NEXT.JS & FLUTTER)
+================================================================================
+
+Strict directory structures enforce clean architecture principles.
+
+--------------------------------------------------------------------------------
+6.1. Next.js Web Back Office Folder Structure
+--------------------------------------------------------------------------------
+Utilizes Next.js App Router, CSS Modules, and TypeScript layout definitions.
+
+```
+/minoorder-web-back-office
+├── /src
+│   ├── /app
+│   │   ├── layout.tsx                # Base metadata, dynamic configurations
+│   │   ├── page.tsx                  # Landing / login redirection
+│   │   ├── /super-admin              # Super Admin sub-portal (PlatePixels)
+│   │   │   ├── layout.tsx
+│   │   │   ├── page.tsx
+│   │   │   ├── /tenants              # Tenant subscription & licensing
+│   │   │   ├── /stores               # Global Store config
+│   │   │   └── /monitoring           # Platform health metrics & audit logs
+│   │   └── /store-admin              # Store Admin portal (Merchant)
+│   │       ├── layout.tsx
+│   │       ├── page.tsx
+│   │       ├── /menu                 # Menu, Combo & Modifier creators
+│   │       ├── /staff                # Shift scheduling and Cashier Roles
+│   │       ├── /hardware             # Star/Epson printer IP mappings
+│   │       ├── /compliance           # Fiscal module setup (FDM / Fiskaly)
+│   │       └── /reports              # Exportable X/Z reports & raw financial ledgers
+│   ├── /components
+│   │   ├── /ui                       # Premium custom components (buttons, glass modals)
+│   │   ├── /shared                   # Common elements (Navbar, Sidebar)
+│   │   └── /charts                   # Recharts wrapper for analytics
+│   ├── /core                         # System Engine mapping algorithms
+│   │   ├── vat-engine.ts
+│   │   └── combo-engine.ts
+│   ├── /hooks                        # Custom state query wrappers
+│   ├── /services                     # Supabase JS Client clients
+│   │   ├── supabase-admin.ts         # Server-only client using service role safely
+│   │   └── supabase-client.ts        # Browser RLS client
+│   └── /styles
+│       ├── globals.css               # CSS Variable tokens, premium fluid themes
+│       └── mixins.css
+├── tailwind.config.js                # Not used unless specified (Vanilla CSS preferred)
+├── tsconfig.json
+└── package.json
+```
+
+--------------------------------------------------------------------------------
+6.2. Flutter POS & Kiosk Single-Codebase Folder Structure
+--------------------------------------------------------------------------------
+Maintains clean separation of Presentation, Domain, and Data layers.
+
+```
+/minoorder_mobile
+├── /android                          # Native hooks (serial port SDKs for FDM/printers)
+├── /assets
+│   ├── /images                       # Premium animations, background assets
+│   └── /translations                 # Multilingual translation matrices (EN, NL, FR)
+├── /lib
+│   ├── main_pos.dart                 # POS Mode Entry Point (Configures POS Flavor)
+│   ├── main_kiosk.dart               # Kiosk Mode Entry Point (Configures Kiosk Flavor)
+│   ├── /core
+│   │   ├── /constants                # Theme colors, text styling definitions
+│   │   ├── /network                  # Offline queue manager, Interceptors, Realtime
+│   │   ├── /hardware                 # Star/Epson/Sunmi native bridge classes
+│   │   └── /errors                   # Unified Exception handling definitions
+│   ├── /domain                       # Pure entities and Business logic (No framework dependencies)
+│   │   ├── /entities
+│   │   │   ├── item.dart
+│   │   │   ├── order.dart
+│   │   │   └── shift.dart
+│   │   ├── /repositories             # Repository contracts
+│   │   └── /usecases                 # Interactor files
+│   ├── /data                         # Implementations of Domain repositories
+│   │   ├── /datasources
+│   │   │   ├── local_db.dart         # Sembast / Drift SQLite wrapper
+│   │   │   └── supabase_api.dart     # Online Client wrappers
+│   │   └── /repositories             # Core API wrappers mapped from domain
+│   ├── /presentation                 # Platform UI views
+│   │   ├── /shared
+│   │   │   └── /widgets              # Glass containers, numpads, receipts
+│   │   ├── /pos                      # POS specific flow BLoC / UI components
+│   │   │   ├── /bloc
+│   │   │   └── /screens
+│   │   │       ├── pos_dashboard.dart
+│   │   │       └── shift_screen.dart
+│   │   └── /kiosk                    # Kiosk specific flow BLoC / UI components
+│   │       ├── /bloc
+│   │       └── /screens
+│   │           ├── idle_screen.dart
+│   │           ├── catalog_grid.dart
+│   │           └── combo_wizard.dart
+│   └── /shared_business_engine        # Shared engines across flavors
+│       ├── vat_engine.dart
+│       ├── combo_engine.dart
+│       ├── receipt_engine.dart
+│       └── fiscal_engine.dart
+├── pubspec.yaml
+└── README.md
+```
+
+================================================================================
+7. UI SCREEN INVENTORY
+================================================================================
+
+To create a stunning user experience, the system UI must feel alive, clean, and 
+highly responsive. We plan out the screen elements:
+
+--------------------------------------------------------------------------------
+7.1. PlatePixels Super Admin Portal (Web)
+--------------------------------------------------------------------------------
+- **Overview Dashboard**: Micro-charts detailing MRR, active devices, and API 
+  system loads.
+- **Tenant Management Grid**: Activation/suspension toggles, subscription controls.
+- **Store Configuration Interface**: Regional settings, fiscal registry.
+- **Support & Audit Console**: Central audit viewer with filterable fields.
+
+--------------------------------------------------------------------------------
+7.2. Store Admin Portal (Web)
+--------------------------------------------------------------------------------
+- **Merchant Dashboard**: Daily sales metrics, active cashier status, and kitchen 
+  latencies.
+- **Multilingual Menu Architect**: Tree builder for Categories -> Subcategories 
+  -> Items.
+- **Combo Creator Sandbox**: Drag-and-drop combo compiler.
+- **Device Provisioner**: Hardware bindings, licensing keys, active terminal states.
+- **Fiscal Analytics Suite**: Visualizer for signed invoices and generated X/Z reports.
+
+--------------------------------------------------------------------------------
+7.3. Android POS Mode (Flutter Client)
+--------------------------------------------------------------------------------
+- **Device Authentication Screen**: Clean code binding form.
+- **Cashier Landing Screen**: Secured PIN pad for fast login and shift status check.
+- **Fast-Touch Sale Board**: Left-side categorical list; right-side active order 
+  cart panel.
+- **Modifier & Combo Overlay Dialogs**: Popups for required options.
+- **Split Payment Dashboard**: Advanced calculator for complex payments.
+- **Printer & Hardware Console**: Instant printer tests and cash drawer toggles.
+
+--------------------------------------------------------------------------------
+7.4. Android Kiosk Mode (Flutter Client)
+--------------------------------------------------------------------------------
+- **Cinematic Ambient Idle Screen**: Loop video/images of promotional meals.
+- **Language / Order-Type Gateway**: Beautiful glass buttons (Dutch, French, 
+  English).
+- **Product Matrix Catalog**: Smooth scrolling list with micro-animations.
+- **Interactive Combo Wizard**: Step-by-step modal for combo configuration.
+- **Upsell Modal Sheet**: Contextual suggestions (e.g. "Add chocolate cake?").
+- **Payment Terminal Intermediary Screen**: Clean instructions during card 
+  terminal interactions.
+
+================================================================================
+8. COMPREHENSIVE USER STORIES (GHERKIN ACCEPTANCE CRITERIA)
+================================================================================
+
+We enforce software quality by defining strict behavioral acceptance criteria.
+
+--------------------------------------------------------------------------------
+8.1. User Story: Kiosk Checkout with Proportional Combo Discount Allocation
+--------------------------------------------------------------------------------
+**As a** Dine-in Customer  
+**I want to** purchase a fixed-price combo containing items of different VAT rates  
+**So that** my bill is calculated correctly, and the store remains tax-compliant in Belgium.
+
+- **Scenario: Proportional VAT allocation of Combo Discount**
+  - **Given** a customer selects "Dine-in" order type
+  - **And** the customer selects a "Burger Combo" priced at a fixed gross total of 15.00 EUR
+  - **And** the combo contains:
+    - 1x Beef Burger (normal price 10.00 EUR, Food Dine-in VAT 12%)
+    - 1x Cola (normal price 3.00 EUR, Drink Dine-in VAT 21%)
+    - 1x Fries (normal price 2.00 EUR, Food Dine-in VAT 12%)
+  - **When** the customer proceeds to checkout
+  - **Then** the engine calculates the Total Normal Price as 15.00 EUR (10 + 3 + 2)
+  - **And** detects no gross price difference (fixed price matches normal total: no discount)
+  - **But if** the same combo has a fixed price of 12.00 EUR:
+    - **Then** the engine calculates a total discount of 3.00 EUR (15.00 - 12.00)
+    - **And** calculates a discount ratio of 20% (3.00 / 15.00)
+    - **And** allocates the discounted gross prices as:
+      - Beef Burger: 8.00 EUR (8.96 EUR net + 0.96 EUR VAT at 12%)
+      - Cola: 2.40 EUR (1.98 EUR net + 0.42 EUR VAT at 21%)
+      - Fries: 1.60 EUR (1.43 EUR net + 0.17 EUR VAT at 12%)
+    - **And** verifies that the sum of discounted gross prices equals 12.00 EUR (8.00 + 2.40 + 1.60)
+    - **And** verifies that the total extracted VAT equals 1.55 EUR (0.96 + 0.42 + 0.17)
+
+--------------------------------------------------------------------------------
+8.2. User Story: POS Cashier Shift Closing with Fiscal Audit Signature (Z-Report)
+--------------------------------------------------------------------------------
+**As a** POS Cashier  
+**I want to** close my active shift at the end of the business day  
+**So that** a legal fiscal Z-Report is generated, digitally signed, locked, and sent to tax authorities.
+
+- **Scenario: Successful Shift Closing and Z-Report signing**
+  - **Given** cashier "John Doe" is logged into a POS terminal with an open shift
+  - **And** the shift has registered 1,200.00 EUR in gross sales with 50 orders
+  - **When** the cashier initiates the "Close Shift" command
+  - **Then** the system locks order inputs for this terminal
+  - **And** calls the `generate-z-report` Edge Function
+  - **And** the edge function requests a signature from the registered fiscal provider (e.g. Fiskaly)
+  - **And** writes the final Z-Report record to the `z_reports` table
+  - **And** signs the report, obtaining a `fiscal_signature`
+  - **And** writes an immutable record to the system audit log
+  - **And** sends print commands to the cashier's receipt printer
+  - **And** terminates the cashier's session, setting the shift state to closed.
+
+--------------------------------------------------------------------------------
+8.3. User Story: POS Offline Transaction Queue Sync
+--------------------------------------------------------------------------------
+**As a** Store Operator  
+**I want** my POS terminal to process card/cash sales when the restaurant's internet drops  
+**So that** service does not halt, and all offline orders are synced once online.
+
+- **Scenario: Offline transaction queuing and idempotent sync**
+  - **Given** the POS terminal detects `internet_status = offline`
+  - **When** a cashier completes a cash sale of 45.00 EUR
+  - **Then** the POS generates a unique UUID `order_id` (e.g., `4fa7c8bb-4412...`)
+  - **And** persists the complete transaction locally in SQLite as `pending_sync`
+  - **And** prints a compliant checkout receipt marked with offline notice
+  - **When** the internet connection is restored
+  - **Then** the offline sync engine activates
+  - **And** sends the queued order payload to `create-order` Edge Function
+  - **And** if a network glitch causes the sync engine to submit the same payload twice:
+    - **Then** the Edge Function detects the duplicate UUID `order_id` in the database
+    - **And** returns a `200 OK` (conflict skipped) without duplicating financial entries.
+
+================================================================================
+9. DEVOPS, DEPLOYMENT, & OBSERVABILITY STRATEGY
+================================================================================
+
+To achieve enterprise-grade reliability, we implement strict environments, a 
+secure branching model, automated pipelines, and continuous monitoring.
+
+--------------------------------------------------------------------------------
+9.1. Multi-Environment Infrastructure Setup
+--------------------------------------------------------------------------------
+- **Development (`dev`)**: Dedicated Supabase local environment via Supabase CLI. 
+  Used for component building and initial DDL migrations.
+- **Staging (`staging`)**: Cloud staging instance at `staging.minoorder.com`. Used 
+  for integration testing, QA runs, and automated terminal simulator tests.
+- **Production (`production`)**: Clustered multi-region AWS/Vercel host pointing to 
+  `minoorder.com`. Supabase production cluster with point-in-time recovery (PITR) 
+  backups.
+
+--------------------------------------------------------------------------------
+9.2. Git Branching Strategy
+--------------------------------------------------------------------------------
+We follow GitHub Flow with strict protection rules:
+- `main`: Reflects the current production state. Direct pushes are disabled. 
+  Requires at least 2 senior code reviews and successful CI testing.
+- `staging`: Reflects the staging preview branch. Integrates release candidates.
+- `feature/*`: Short-lived branches created for individual components. Must be 
+  rebased against staging/main before merging.
+
+--------------------------------------------------------------------------------
+9.3. CI/CD Deployment Pipelines (GitHub Actions)
+--------------------------------------------------------------------------------
+- **Code Validation**: On pull requests, the pipeline triggers:
+  - TypeScript/Next.js linting and static analysis checks.
+  - Flutter formatting, analysis (`flutter analyze`), and unit tests.
+- **Database Migrations**: Supabase migrations are run against Staging and then 
+  Production using `supabase db push`.
+- **Automatic Web Deployments**: Vercel handles Next.js deployments automatically 
+  upon main merge.
+- **Mobile Builds**: Codemagic/GitHub Actions compiles release APKs, signing them 
+  with production keystores and uploading to the Google Play Store (Internal/Alpha 
+  tracks).
+
+--------------------------------------------------------------------------------
+9.4. Observability & Auditing
+--------------------------------------------------------------------------------
+- **Application Performance**: Sentry is initialized in POS, Kiosk, and Web Back 
+  Office, tracking unexpected UI failures or performance slowdowns.
+- **Logging**: Next.js logs and Supabase Edge Function execution times are piped 
+  to Datadog or Axiom for log retention.
+- **Database Auditing**: The database table `audit_logs` records all structural updates, 
+  and a background job replicates these logs to secure long-term WORM (Write Once, 
+  Read Many) storage to comply with tax audit regulations.
+
+================================================================================
+10. 6-SPRINT IMPLEMENTATION ROADMAP
+================================================================================
+
+A concrete, production-ready, 6-sprint implementation timeline to build MinoOrder.
+
+```mermaid
+gantt
+    title MinoOrder 6-Sprint Project Roadmap
+    dateFormat  YYYY-MM-DD
+    section Backend
+    Sprint 1: Schema & Auth         :active,   des1, 2026-06-01, 2026-06-14
+    Sprint 5: VAT, Combo & Fiscal   :          des5, 2026-07-27, 2026-08-09
+    section Web Office
+    Sprint 2: Portal Development    :          des2, 2026-06-15, 2026-06-28
+    section Clients
+    Sprint 3: POS Core & Hardware   :          des3, 2026-06-29, 2026-07-12
+    Sprint 4: Kiosk & Payment Core  :          des4, 2026-07-13, 2026-07-26
+    section Integration
+    Sprint 6: Sync Engine & Launch  :          des6, 2026-08-10, 2026-08-23
+```
+
+--------------------------------------------------------------------------------
+Sprint 1: Core DB Schema & Security Foundation (Weeks 1-2)
+--------------------------------------------------------------------------------
+- **Deliverables**:
+  - Deploy PostgreSQL database schema, tables, indices, and foreign keys on Supabase.
+  - Configure Supabase Auth rules and setup store-user role mapping tables.
+  - Implement and verify Row Level Security (RLS) policies for tenant isolation.
+  - Write structural unit tests verifying database read/write limits by role.
+- **Milestone**: Multi-tenant database secure, rejecting unauthorized cross-tenant requests.
+
+--------------------------------------------------------------------------------
+Sprint 2: Web Back Office & Menu Management Portal (Weeks 3-4)
+--------------------------------------------------------------------------------
+- **Deliverables**:
+  - Build Next.js folder skeleton with App Router.
+  - Construct Super Admin views: Tenant creation, licensing, store management.
+  - Construct Store Admin views: Menu builder interface, combo creator sandbox.
+  - Develop Edge Function `publish-menu-snapshot` to create versioned JSON structures.
+- **Milestone**: Store owners can log in, create a category/item structure, and 
+  generate active menu snapshots.
+
+--------------------------------------------------------------------------------
+Sprint 3: POS Core & Printer/Hardware Integrations (Weeks 5-6)
+--------------------------------------------------------------------------------
+- **Deliverables**:
+  - Initialize Flutter single-codebase config, flavor configurations (`main_pos.dart`).
+  - Develop POS layout (PIN landing page, cart management, item list, modifier sheet).
+  - Implement native Flutter plugins for Sunmi SDK, Epson ESC/POS, Star Printer TCP.
+  - Write printer routing engine to print receipts and kitchen prep slips.
+- **Milestone**: POS client successfully registers, binds to store, receives menu 
+  snapshots, and prints raw text.
+
+--------------------------------------------------------------------------------
+Sprint 4: Kiosk Core & Payment Engine (Weeks 7-8)
+--------------------------------------------------------------------------------
+- **Deliverables**:
+  - Set up Kiosk entry flavor (`main_kiosk.dart`).
+  - Develop Kiosk screens (cinematic idle, product catalog, combo configuration wizard).
+  - Connect Flutter client with payment terminal SDKs (Payconiq Cloud/CCV SDKs).
+  - Implement deep security filters: Auto-reset timer, hidden admin PIN overlay.
+- **Milestone**: Kiosk client executes a self-service purchase, routes card payment, 
+  and shows order confirmation.
+
+--------------------------------------------------------------------------------
+Sprint 5: VAT, Combo, & Fiscal Engines (Weeks 9-10)
+--------------------------------------------------------------------------------
+- **Deliverables**:
+  - Implement the core Shared Business Engines (VAT, Combo proportional discount).
+  - Develop and deploy Edge Functions `calculate-cart` and `create-order`.
+  - Build connection adapters in `fiscal_engine` (Simulator, Checkbox, Fiskaly).
+  - Implement secure server-side transaction signing through `fiscal-sign-order` 
+    Edge Function.
+- **Milestone**: Every order calculates correct, compliant VAT (including combo discounts) 
+  and receives a digital signature.
+
+--------------------------------------------------------------------------------
+Sprint 6: Sync Engine, Integrity Testing, & Go-Live (Weeks 11-12)
+--------------------------------------------------------------------------------
+- **Deliverables**:
+  - Implement Offline Sync Engine (SQLite queue buffer + network status hook).
+  - Setup and execute load tests simulating 100 concurrent Kiosks pushing sales.
+  - Perform security penetration checks on RLS logic and edge variables.
+  - Finalize Belgium FDM regulatory go-live checks.
+- **Milestone**: Platform certified for operational launches; first live pilot deployed.
+
+================================================================================
+11. ENTERPRISE RISK REGISTER & MITIGATION STRATEGIES
+================================================================================
+
+We identify, analyze, and outline responses to key system risks:
+
+| Risk Description | Category | Prob. | Impact | Mitigation Plan |
+|:---|:---|:---:|:---:|:---|
+| **Tax Audit Failure / VAT Mismatch** <br> Belgium fiscal authorities reject invoice records due to rounding discrepancies. | Legal Compliance | Low | Critical | Standardize all VAT calculations on the backend using decimal arithmetic. Prohibit any local price calculations. Store VAT logs in WORM storage. |
+| **Offline Sync Out of Order** <br> Queue submissions fail or write duplicate orders during network recovery. | Data Integrity | Med | High | Use UUIDs as primary keys. Implement server-side idempotency validation in Edge Functions. Queue orders sequentially using an isolated local buffer. |
+| **Hardware Driver Failures** <br> Inability to print receipts halts store operations (legal requirement in Belgium). | Operations | High | Med | Implement a hardware abstraction layer (HAL) with fallback mechanisms. Provide printer failure notifications with options to reroute print jobs. |
+| **Cross-Tenant Data Exposure** <br> A store admin or client device views another tenant's order data. | Security | Low | Critical | Write comprehensive automated integration tests for every database schema update. Validate that service role keys are excluded from client code. |
+| **Payment Terminal Desync** <br> Client payment completes on terminal, but POS app fails to receive confirmation. | Customer Experience | Med | High | Terminal transactions must generate a payment record in `pending` state BEFORE hitting the terminal. Implement a manual query terminal API call. |
+
+================================================================================
+12. BELGIUM FDM COMPLIANCE GO-LIVE & EUROPEAN EXPANSION CHECKLISTS
+================================================================================
+
+--------------------------------------------------------------------------------
+12.1. Belgium Go-Live Checklist (FDM / "Black Box")
+--------------------------------------------------------------------------------
+- [ ] **VAT Engine Validation**: Verify that 6% takeaway, 12% dine-in (food), and 
+      21% (drinks/alcohol) are calculated correctly.
+- [ ] **Proportional Combo Allocations**: Ensure combo bundles distribute discounts 
+      proportionally across VAT groups.
+- [ ] **FDM Hardware Integration**: Confirm connection to certified Fiscal Data 
+      Modules.
+- [ ] **VAT Receipt Format**: Ensure printed receipts include:
+  - VAT identification number of the operator.
+  - Precise list of items and VAT categories (A, B, C, D labels).
+  - FDM Signature block: FDM ticket counter, signatures, and FDM secure hash.
+- [ ] **Z-Reports Integrity**: Verify Z-Reports reset daily sales aggregates, lock 
+      the ledger, and generate an immutable signed receipt block.
+- [ ] **Audit Trail Storage**: Confirm that logs of database updates, cashier shifts, 
+      and FDM connections are preserved.
+
+--------------------------------------------------------------------------------
+12.2. European Expansion Blueprint
+--------------------------------------------------------------------------------
+1. **Dynamic Localization**: Ensure the Next.js database and local translation 
+   files use translation matrices. Avoid hardcoding English, French, or Dutch.
+2. **Pluggable Fiscal Interface**: Keep VAT rates, rounding methods, and payment 
+   methods dynamic:
+   - *Germany*: Hook `fiskaly` or another cloud TSS provider.
+   - *France*: Implement NF525 certification rules (continuous receipt hash chains).
+   - *Austria*: Connect with the signature creation system (Registrierkasse).
+3. **Multi-Currency System Configuration**: Generalize the database `amount` 
+   and `gross_price` fields to decouple from fixed EUR symbols. Introduce currency 
+   lookup configurations linked to the store's operating country code.
+4. **European Data Residency (GDPR)**: Configure Supabase clusters within the EU 
+   (e.g., Frankfurt/Belgium) to isolate European tenant transaction histories.
+
+================================================================================
+                   END OF BLUEPRINT & IMPLEMENTATION PLAN
+================================================================================

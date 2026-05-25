@@ -1,0 +1,17 @@
+project_id = "minoorder"
+
+[api]
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54323
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://minoorder.com"]
+jwt_expiry = 3600
+enable_signup = false
