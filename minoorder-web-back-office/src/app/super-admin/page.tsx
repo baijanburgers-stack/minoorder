@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import '../../styles/globals.css';
 
 interface VatRates {
@@ -123,6 +123,25 @@ export default function CleanSuperAdminPortal() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [storePerformances, setStorePerformances] = useState<StorePerformance[]>([]);
+  const [saHydrated, setSaHydrated] = useState(false);
+  const [activeStoreId, setActiveStoreId] = useState<string>('');
+
+  // ── Hydrate stores from localStorage after mount (SSR-safe) ──────────────
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('mino_sa_stores');
+      if (raw) setStorePerformances(JSON.parse(raw));
+      const aid = localStorage.getItem('mino_active_store_id');
+      if (aid) setActiveStoreId(aid);
+    } catch {}
+    setSaHydrated(true);
+  }, []);
+
+  // ── Persist stores to localStorage whenever they change ──────────────────
+  useEffect(() => {
+    if (!saHydrated) return;
+    try { localStorage.setItem('mino_sa_stores', JSON.stringify(storePerformances)); } catch {}
+  }, [saHydrated, storePerformances]);
 
   // Form states to add new stores
   const [storeName, setStoreName] = useState('');
@@ -341,6 +360,13 @@ export default function CleanSuperAdminPortal() {
     };
 
     setStorePerformances([...storePerformances, newStore]);
+
+    // ── Wire VAT rates to Store Admin localStorage ────────────────────────
+    try {
+      localStorage.setItem('mino_vat_rates', JSON.stringify(newStore.vatRates));
+      localStorage.setItem('mino_active_store_id', newStore.id);
+      localStorage.setItem('mino_active_store_name', newStore.name);
+    } catch {}
     
     // Beautiful alert confirmation showing provisioned credentials
     alert(`Store Node Deployed Successfully!\n\nStore Admin Account Registered:\nUser: ${adminEmail}\nPass: ${adminPassword}\n\nPlease share these credentials securely with the Store Admin.`);
@@ -449,6 +475,15 @@ export default function CleanSuperAdminPortal() {
     e.preventDefault();
     if (!editingStore || !editStoreName || !editCompanyName || !editVatNumber || !editCity) return;
 
+    const updatedRates = {
+      foodTakeaway: parseFloat(editFoodTakeaway),
+      foodDineIn: parseFloat(editFoodDineIn),
+      softDrinkTakeaway: parseFloat(editSoftTakeaway),
+      softDrinkDineIn: parseFloat(editSoftDineIn),
+      alcoholTakeaway: parseFloat(editAlcoholTakeaway),
+      alcoholDineIn: parseFloat(editAlcoholDineIn),
+    };
+
     setStorePerformances(storePerformances.map(store => {
       if (store.id === editingStore.id) {
         return {
@@ -468,18 +503,16 @@ export default function CleanSuperAdminPortal() {
           isFdmRequired: editIsFdmRequired,
           fiscalApiKey: editIsFdmRequired ? editFiscalApiKey : '',
           logoUrl: editLogoUrl,
-          vatRates: {
-            foodTakeaway: parseFloat(editFoodTakeaway),
-            foodDineIn: parseFloat(editFoodDineIn),
-            softDrinkTakeaway: parseFloat(editSoftTakeaway),
-            softDrinkDineIn: parseFloat(editSoftDineIn),
-            alcoholTakeaway: parseFloat(editAlcoholTakeaway),
-            alcoholDineIn: parseFloat(editAlcoholDineIn),
-          }
+          vatRates: updatedRates,
         };
       }
       return store;
     }));
+
+    // ── Wire updated VAT rates to Store Admin localStorage ────────────────
+    if (editingStore.id === localStorage.getItem('mino_active_store_id')) {
+      try { localStorage.setItem('mino_vat_rates', JSON.stringify(updatedRates)); } catch {}
+    }
 
     setIsEditModalOpen(false);
     setEditingStore(null);
@@ -1001,6 +1034,32 @@ export default function CleanSuperAdminPortal() {
                               }}
                             >
                               ✏️ Edit
+                            </button>
+                            {/* Activate → push VAT to Store Admin */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                try {
+                                  localStorage.setItem('mino_vat_rates', JSON.stringify(store.vatRates));
+                                  localStorage.setItem('mino_active_store_id', store.id);
+                                  localStorage.setItem('mino_active_store_name', store.name);
+                                  setActiveStoreId(store.id);
+                                } catch {}
+                              }}
+                              style={{
+                                background: activeStoreId === store.id ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.03)',
+                                border: activeStoreId === store.id ? '1px solid rgba(16,185,129,0.35)' : '1px solid rgba(255,255,255,0.07)',
+                                color: activeStoreId === store.id ? '#6ee7b7' : 'var(--text-muted)',
+                                borderRadius: '6px',
+                                padding: '5px 10px',
+                                cursor: 'pointer',
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                whiteSpace: 'nowrap',
+                                transition: 'all 0.15s',
+                              }}
+                            >
+                              {activeStoreId === store.id ? '✅ Active' : '⚡ Activate'}
                             </button>
                             <button
                               type="button"

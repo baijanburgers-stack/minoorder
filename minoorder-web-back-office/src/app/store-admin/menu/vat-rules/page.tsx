@@ -17,6 +17,15 @@ export default function VatRulesPage() {
   const fmt = (n: number) => n.toFixed(2);
 
   const [isLocked, setIsLocked] = useState(true);
+  const [activeStoreName, setActiveStoreName] = useState('');
+
+  // Read active store name from localStorage after mount
+  useEffect(() => {
+    try {
+      const n = localStorage.getItem('mino_active_store_name');
+      if (n) setActiveStoreName(n);
+    } catch {}
+  }, []);
   const [foodTakeaway,    setFoodTakeaway]    = useState(fmt(storeVatRates.foodTakeaway));
   const [foodDineIn,      setFoodDineIn]      = useState(fmt(storeVatRates.foodDineIn));
   const [softTakeaway,    setSoftTakeaway]    = useState(fmt(storeVatRates.softDrinkTakeaway));
@@ -88,9 +97,16 @@ export default function VatRulesPage() {
           <span style={{ fontSize: '1.1rem' }}>📐</span>
           <h1 className="page-title"><span className="text-gradient">Store VAT Rules</span></h1>
         </div>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '8px' }}>
           Belgium fiscal tax rates per product category and service channel.
         </p>
+        {/* Provisioning source banner */}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: '6px', background: activeStoreName ? 'rgba(16,185,129,0.07)' : 'rgba(99,102,241,0.06)', border: activeStoreName ? '1px solid rgba(16,185,129,0.2)' : '1px solid rgba(99,102,241,0.15)' }}>
+          <span style={{ fontSize: '0.7rem' }}>{activeStoreName ? '🏪' : '⚙️'}</span>
+          <span style={{ fontSize: '0.68rem', fontWeight: 700, color: activeStoreName ? '#6ee7b7' : '#a5b4fc' }}>
+            {activeStoreName ? `Provisioned from Super Admin: ${activeStoreName}` : 'Custom store-level override (no store activated)'}
+          </span>
+        </div>
       </div>
 
       <form onSubmit={handleSave}>
