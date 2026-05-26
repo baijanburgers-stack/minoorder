@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMenu } from '../context';
 import { useToast } from '../../../../components/Toast';
 
@@ -23,6 +23,18 @@ export default function VatRulesPage() {
   const [softDineIn,      setSoftDineIn]      = useState(fmt(storeVatRates.softDrinkDineIn));
   const [alcoholTakeaway, setAlcoholTakeaway] = useState(fmt(storeVatRates.alcoholTakeaway));
   const [alcoholDineIn,   setAlcoholDineIn]   = useState(fmt(storeVatRates.alcoholDineIn));
+
+  // Sync local form fields whenever context updates (e.g. after localStorage hydration).
+  // Only sync when locked — never override user input mid-edit.
+  useEffect(() => {
+    if (!isLocked) return;
+    setFoodTakeaway(fmt(storeVatRates.foodTakeaway));
+    setFoodDineIn(fmt(storeVatRates.foodDineIn));
+    setSoftTakeaway(fmt(storeVatRates.softDrinkTakeaway));
+    setSoftDineIn(fmt(storeVatRates.softDrinkDineIn));
+    setAlcoholTakeaway(fmt(storeVatRates.alcoholTakeaway));
+    setAlcoholDineIn(fmt(storeVatRates.alcoholDineIn));
+  }, [storeVatRates]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // POS currency-style input: digits only, last 2 are decimals
   const posInput = (setter: (v: string) => void) =>
