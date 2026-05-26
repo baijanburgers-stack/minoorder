@@ -40,9 +40,8 @@ interface MenuContextType {
 
 const MenuContext = createContext<MenuContextType | undefined>(undefined);
 
-// ─── localStorage helpers ──────────────────────────────────────────────────
+// ─── Safe localStorage helpers (client-only) ────────────────────────────────
 function lsGet<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback;
   try {
     const raw = localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as T) : fallback;
@@ -51,11 +50,10 @@ function lsGet<T>(key: string, fallback: T): T {
   }
 }
 function lsSet(key: string, value: unknown) {
-  if (typeof window === 'undefined') return;
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 }
 
-// ─── Seed data (used only on first load if localStorage is empty) ──────────
+// ─── Seed data ──────────────────────────────────────────────────────────────
 const SEED_ITEMS: MenuItem[] = [
   { id: '1', name: 'Classic Beef Burger', nameEn: 'Classic Beef Burger', nameFr: 'Burger au Bœuf Classique', nameNl: 'Klassieke Rundvlees Burger', grossPrice: 10.00, vatCategory: 'food', categoryId: 'c1', modifierIds: ['mg1', 'mg2'] },
   { id: '2', name: 'Gourmet Double Cheese', nameEn: 'Gourmet Double Cheese', nameFr: 'Double Cheese Gourmet', nameNl: 'Gourmet Dubbele Kaas', grossPrice: 13.50, vatCategory: 'food', categoryId: 'c1', modifierIds: ['mg1', 'mg2'] },
@@ -70,7 +68,7 @@ const SEED_CATEGORIES = [
   { id: 'c2', name: 'Sides 🍟', nameEn: 'Sides 🍟', nameFr: 'Accompagnements 🍟', nameNl: 'Bijgerechten 🍟', sortOrder: 2, visiblePos: true, visibleKiosk: true },
   { id: 'c3', name: 'Drinks 🥤', nameEn: 'Drinks 🥤', nameFr: 'Boissons 🥤', nameNl: 'Dranken 🥤', sortOrder: 3, visiblePos: true, visibleKiosk: true },
 ];
-const SEED_MODIFIER_GROUPS = [
+const SEED_MODIFIERS = [
   { id: 'mg1', name: 'Choose Burger Temperature 🥩', nameEn: 'Choose Burger Temperature 🥩', nameFr: 'Choisir la Cuisson du Burger 🥩', nameNl: 'Kies Bakwijze Burger 🥩', minSelection: 1, maxSelection: 1, isRequired: true, options: [
     { id: 'mo1', name: 'Medium Rare', nameEn: 'Medium Rare', nameFr: 'Bleu / Saignant', nameNl: 'Medium Rare', upcharge: 0.00 },
     { id: 'mo2', name: 'Medium Well', nameEn: 'Medium Well', nameFr: 'À Point', nameNl: 'Medium Gekookt', upcharge: 0.00 },
@@ -86,47 +84,55 @@ const SEED_DEALS = [
   { id: 'd1', name: 'Standard Burger Combo Deal 🍔🍟🥤', nameEn: 'Standard Burger Combo Deal 🍔🍟🥤', nameFr: 'Offre Combo Burger Standard 🍔🍟🥤', nameNl: 'Standaard Burger Combodeal 🍔🍟🥤', fixedPrice: 12.00, itemIds: ['1', '3', '5'], isAvailable: true },
   { id: 'd2', name: 'Double Feast Deal 🍔🍔🍟🥤🥤', nameEn: 'Double Feast Deal 🍔🍔🍟🥤🥤', nameFr: 'Offre Double Festin 🍔🍔🍟🥤🥤', nameNl: 'Dubbel Feestdeal 🍔🍔🍟🥤🥤', fixedPrice: 22.00, itemIds: ['1', '2', '3', '5', '7'], isAvailable: true },
 ];
-const SEED_PRINTERS = [
-  { id: 'p1', name: 'Star Counter Receipt (POS)', connectionType: 'ip', address: '192.168.1.100', role: 'receipt' },
-  { id: 'p2', name: 'Epson Kitchen Hot Pass', connectionType: 'usb', address: 'COM3', role: 'kitchen' },
-  { id: 'p3', name: 'Bar Drinks Printer', connectionType: 'ip', address: '192.168.1.105', role: 'bar' },
-];
-const SEED_SHIFTS = [
-  { id: 'shift-104', cashier: 'John Doe', opened: '2026-05-25 08:30:12', closed: '2026-05-25 16:45:00', openingCash: 150.00, closingCash: 852.50, status: 'Closed Fiscally', zReportHash: 'Z_SIG_8872_SHA256_FDM_BE' },
-  { id: 'shift-105', cashier: 'Sarah Connor', opened: '2026-05-25 17:00:00', closed: null, openingCash: 150.00, closingCash: 0.00, status: 'Active (Current)', zReportHash: '' },
-];
-const SEED_ORDERS = [
-  { id: 'ord-9921', orderNumber: 'T-12', time: '2026-05-25 19:42:15', gross: 29.50, net: 26.85, vat: 2.65, method: 'Card', receiptNumber: 'BE-STORE01-20260525-T-12', fdmHash: 'SIG_ab78d91_SHA256_FDM' },
-  { id: 'ord-9922', orderNumber: 'D-08', time: '2026-05-25 20:05:33', gross: 12.00, net: 11.32, vat: 0.68, method: 'Bancontact', receiptNumber: 'BE-STORE01-20260525-D-08', fdmHash: 'SIG_bc99e12_SHA256_FDM' },
-  { id: 'ord-9923', orderNumber: 'T-13', time: '2026-05-25 20:15:00', gross: 42.10, net: 37.80, vat: 4.30, method: 'Payconiq', receiptNumber: 'BE-STORE01-20260525-T-13', fdmHash: 'SIG_de44f89_SHA256_FDM' },
-];
 const SEED_VAT = { foodTakeaway: 6.00, foodDineIn: 12.00, softDrinkTakeaway: 6.00, softDrinkDineIn: 12.00, alcoholTakeaway: 21.00, alcoholDineIn: 21.00 };
 
-// ─── LS keys ───────────────────────────────────────────────────────────────
 const LS = {
-  vatRates:       'mino_vat_rates',
-  items:          'mino_items',
-  categories:     'mino_categories',
-  modifiers:      'mino_modifiers',
-  deals:          'mino_deals',
-  language:       'mino_language',
+  vatRates:   'mino_vat_rates',
+  items:      'mino_items',
+  categories: 'mino_categories',
+  modifiers:  'mino_modifiers',
+  deals:      'mino_deals',
+  language:   'mino_language',
 };
 
 export function MenuProvider({ children }: { children: React.ReactNode }) {
 
-  const [language,       setLanguage]       = useState<'en' | 'fr' | 'nl'>(() => lsGet(LS.language,   'en'));
-  const [items,          setItems]          = useState<MenuItem[]>(()          => lsGet(LS.items,       SEED_ITEMS));
-  const [categories,     setCategories]     = useState<any[]>(()     => lsGet(LS.categories,  SEED_CATEGORIES));
-  const [modifierGroups, setModifierGroups] = useState<any[]>(() => lsGet(LS.modifiers,   SEED_MODIFIER_GROUPS));
-  const [deals,          setDeals]          = useState<any[]>(()          => lsGet(LS.deals,        SEED_DEALS));
-  const [storeVatRates,  setStoreVatRates]  = useState<any>(()  => lsGet(LS.vatRates,     SEED_VAT));
+  // ── Initialize with SEED data so server & client first-render match ────────
+  // (prevents hydration mismatch — localStorage is read AFTER mount)
+  const [language,       setLanguage]       = useState<'en' | 'fr' | 'nl'>('en');
+  const [items,          setItems]          = useState<MenuItem[]>(SEED_ITEMS);
+  const [categories,     setCategories]     = useState<any[]>(SEED_CATEGORIES);
+  const [modifierGroups, setModifierGroups] = useState<any[]>(SEED_MODIFIERS);
+  const [deals,          setDeals]          = useState<any[]>(SEED_DEALS);
+  const [storeVatRates,  setStoreVatRates]  = useState<any>(SEED_VAT);
 
-  // Non-persisted (session only — real data comes from backend in future)
-  const [printers, setPrinters] = useState(SEED_PRINTERS);
-  const [shifts,   setShifts]   = useState(SEED_SHIFTS);
-  const [orders,   setOrders]   = useState(SEED_ORDERS);
+  // Session-only (no persistence needed yet)
+  const [printers, setPrinters] = useState([
+    { id: 'p1', name: 'Star Counter Receipt (POS)', connectionType: 'ip', address: '192.168.1.100', role: 'receipt' },
+    { id: 'p2', name: 'Epson Kitchen Hot Pass', connectionType: 'usb', address: 'COM3', role: 'kitchen' },
+    { id: 'p3', name: 'Bar Drinks Printer', connectionType: 'ip', address: '192.168.1.105', role: 'bar' },
+  ]);
+  const [shifts, setShifts] = useState([
+    { id: 'shift-104', cashier: 'John Doe', opened: '2026-05-25 08:30:12', closed: '2026-05-25 16:45:00', openingCash: 150.00, closingCash: 852.50, status: 'Closed Fiscally', zReportHash: 'Z_SIG_8872_SHA256_FDM_BE' },
+    { id: 'shift-105', cashier: 'Sarah Connor', opened: '2026-05-25 17:00:00', closed: null, openingCash: 150.00, closingCash: 0.00, status: 'Active (Current)', zReportHash: '' },
+  ]);
+  const [orders, setOrders] = useState([
+    { id: 'ord-9921', orderNumber: 'T-12', time: '2026-05-25 19:42:15', gross: 29.50, net: 26.85, vat: 2.65, method: 'Card', receiptNumber: 'BE-STORE01-20260525-T-12', fdmHash: 'SIG_ab78d91_SHA256_FDM' },
+    { id: 'ord-9922', orderNumber: 'D-08', time: '2026-05-25 20:05:33', gross: 12.00, net: 11.32, vat: 0.68, method: 'Bancontact', receiptNumber: 'BE-STORE01-20260525-D-08', fdmHash: 'SIG_bc99e12_SHA256_FDM' },
+    { id: 'ord-9923', orderNumber: 'T-13', time: '2026-05-25 20:15:00', gross: 42.10, net: 37.80, vat: 4.30, method: 'Payconiq', receiptNumber: 'BE-STORE01-20260525-T-13', fdmHash: 'SIG_de44f89_SHA256_FDM' },
+  ]);
 
-  // ── Persist to localStorage whenever state changes ─────────────────────
+  // ── Hydrate from localStorage AFTER first mount (client-only) ─────────────
+  useEffect(() => {
+    setLanguage(      lsGet(LS.language,   'en'));
+    setItems(         lsGet(LS.items,      SEED_ITEMS));
+    setCategories(    lsGet(LS.categories, SEED_CATEGORIES));
+    setModifierGroups(lsGet(LS.modifiers,  SEED_MODIFIERS));
+    setDeals(         lsGet(LS.deals,      SEED_DEALS));
+    setStoreVatRates( lsGet(LS.vatRates,   SEED_VAT));
+  }, []); // runs once after hydration — no SSR mismatch
+
+  // ── Persist to localStorage on every change ────────────────────────────────
   useEffect(() => { lsSet(LS.language,   language);       }, [language]);
   useEffect(() => { lsSet(LS.items,      items);          }, [items]);
   useEffect(() => { lsSet(LS.categories, categories);     }, [categories]);
