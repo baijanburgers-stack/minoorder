@@ -99,6 +99,7 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
 
   // ── Initialize with SEED data so server & client first-render match ────────
   // (prevents hydration mismatch — localStorage is read AFTER mount)
+  const [hydrated,       setHydrated]       = useState(false);
   const [language,       setLanguage]       = useState<'en' | 'fr' | 'nl'>('en');
   const [items,          setItems]          = useState<MenuItem[]>(SEED_ITEMS);
   const [categories,     setCategories]     = useState<any[]>(SEED_CATEGORIES);
@@ -130,15 +131,17 @@ export function MenuProvider({ children }: { children: React.ReactNode }) {
     setModifierGroups(lsGet(LS.modifiers,  SEED_MODIFIERS));
     setDeals(         lsGet(LS.deals,      SEED_DEALS));
     setStoreVatRates( lsGet(LS.vatRates,   SEED_VAT));
-  }, []); // runs once after hydration — no SSR mismatch
+    setHydrated(true); // ← only NOW allow persist effects to write
+  }, []);
 
-  // ── Persist to localStorage on every change ────────────────────────────────
-  useEffect(() => { lsSet(LS.language,   language);       }, [language]);
-  useEffect(() => { lsSet(LS.items,      items);          }, [items]);
-  useEffect(() => { lsSet(LS.categories, categories);     }, [categories]);
-  useEffect(() => { lsSet(LS.modifiers,  modifierGroups); }, [modifierGroups]);
-  useEffect(() => { lsSet(LS.deals,      deals);          }, [deals]);
-  useEffect(() => { lsSet(LS.vatRates,   storeVatRates);  }, [storeVatRates]);
+  // ── Persist to localStorage — ONLY after hydration is complete ─────────────
+  // Guards prevent overwriting saved data with seeds on initial render
+  useEffect(() => { if (hydrated) lsSet(LS.language,   language);       }, [hydrated, language]);
+  useEffect(() => { if (hydrated) lsSet(LS.items,      items);          }, [hydrated, items]);
+  useEffect(() => { if (hydrated) lsSet(LS.categories, categories);     }, [hydrated, categories]);
+  useEffect(() => { if (hydrated) lsSet(LS.modifiers,  modifierGroups); }, [hydrated, modifierGroups]);
+  useEffect(() => { if (hydrated) lsSet(LS.deals,      deals);          }, [hydrated, deals]);
+  useEffect(() => { if (hydrated) lsSet(LS.vatRates,   storeVatRates);  }, [hydrated, storeVatRates]);
 
   return (
     <MenuContext.Provider value={{
