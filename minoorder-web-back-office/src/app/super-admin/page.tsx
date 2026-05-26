@@ -120,105 +120,9 @@ const formatNumber = (num: number): string => {
 export default function CleanSuperAdminPortal() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'stores' | 'settings'>('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Multi-store performance records with granular VAT rules
-  const [storePerformances, setStorePerformances] = useState<StorePerformance[]>([
-    {
-      id: 's1',
-      name: 'Bella Italia - Central',
-      companyName: 'Bella Italia Group SA',
-      vatNumber: 'BE 0441.982.634',
-      street: 'Anspachlaan 42',
-      city: 'Brussels',
-      postalCode: '1000',
-      country: 'BE',
-      phone: '+32 2 543 21 00',
-      email: 'brussels@bellaitalia.be',
-      dailySales: 1240,
-      monthlySales: 38400,
-      activeDevices: 4,
-      posLimit: 5,
-      kioskLimit: 3,
-      status: 'online',
-      isFdmRequired: true,
-      fiscalSystem: 'BE_FDM',
-      fiscalApiKey: 'BE-FDM-BOX-0441982',
-      logoUrl: '',
-      adminEmail: 'brussels@bellaitalia.be',
-      vatRates: { foodTakeaway: 6, foodDineIn: 12, softDrinkTakeaway: 6, softDrinkDineIn: 12, alcoholTakeaway: 21, alcoholDineIn: 21 }
-    },
-    {
-      id: 's2',
-      name: 'Bella Italia - Express',
-      companyName: 'Bella Italia Group SA',
-      vatNumber: 'BE 0441.982.634',
-      street: 'Meir 12',
-      city: 'Antwerp',
-      postalCode: '2000',
-      country: 'BE',
-      phone: '+32 3 987 65 43',
-      email: 'antwerp@bellaitalia.be',
-      dailySales: 850,
-      monthlySales: 24500,
-      activeDevices: 2,
-      posLimit: 3,
-      kioskLimit: 2,
-      status: 'online',
-      isFdmRequired: false,
-      fiscalSystem: 'STANDARD',
-      logoUrl: '',
-      adminEmail: 'antwerp@bellaitalia.be',
-      vatRates: { foodTakeaway: 6, foodDineIn: 12, softDrinkTakeaway: 6, softDrinkDineIn: 12, alcoholTakeaway: 21, alcoholDineIn: 21 }
-    },
-    {
-      id: 's3',
-      name: 'Le Bistrot Classic',
-      companyName: 'Horeca Wallonie SRL',
-      vatNumber: 'BE 0812.345.678',
-      street: 'Rue de la Cathedrale 8',
-      city: 'Liege',
-      postalCode: '4000',
-      country: 'BE',
-      phone: '+32 4 230 11 22',
-      email: 'contact@lebistrot.be',
-      dailySales: 980,
-      monthlySales: 29800,
-      activeDevices: 3,
-      posLimit: 3,
-      kioskLimit: 2,
-      status: 'online',
-      isFdmRequired: true,
-      fiscalSystem: 'BE_FDM',
-      fiscalApiKey: 'BE-FDM-BOX-0812345',
-      logoUrl: '',
-      adminEmail: 'contact@lebistrot.be',
-      vatRates: { foodTakeaway: 6, foodDineIn: 12, softDrinkTakeaway: 6, softDrinkDineIn: 12, alcoholTakeaway: 21, alcoholDineIn: 21 }
-    },
-    {
-      id: 's4',
-      name: 'Brussels Waffle House',
-      companyName: 'Waffle House Brussels BV',
-      vatNumber: 'BE 0909.112.233',
-      street: 'Grote Markt 5',
-      city: 'Brussels',
-      postalCode: '1000',
-      country: 'BE',
-      phone: '+32 2 443 32 21',
-      email: 'info@brusselswaffle.be',
-      dailySales: 1450,
-      monthlySales: 44200,
-      activeDevices: 5,
-      posLimit: 6,
-      kioskLimit: 4,
-      status: 'online',
-      isFdmRequired: true,
-      fiscalSystem: 'BE_FDM',
-      fiscalApiKey: 'BE-FDM-BOX-0909112',
-      logoUrl: '',
-      adminEmail: 'info@brusselswaffle.be',
-      vatRates: { foodTakeaway: 6, foodDineIn: 12, softDrinkTakeaway: 6, softDrinkDineIn: 12, alcoholTakeaway: 21, alcoholDineIn: 21 }
-    },
-  ]);
+  const [storePerformances, setStorePerformances] = useState<StorePerformance[]>([]);
 
   // Form states to add new stores
   const [storeName, setStoreName] = useState('');
@@ -297,6 +201,7 @@ export default function CleanSuperAdminPortal() {
   // Edit Store modal form states
   const [editingStore, setEditingStore] = useState<StorePerformance | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [editStoreName, setEditStoreName] = useState('');
   const [editCompanyName, setEditCompanyName] = useState('');
   const [editVatNumber, setEditVatNumber] = useState('');
@@ -600,14 +505,19 @@ export default function CleanSuperAdminPortal() {
     <div style={{
       display: 'flex',
       minHeight: '100vh',
-      background: 'var(--bg-primary)',
-      color: 'var(--text-primary)',
-      fontFamily: 'var(--font-body)',
+      background: '#0b0f19',
+      color: '#f9fafb',
+      fontFamily: '"Plus Jakarta Sans", sans-serif',
     }}>
       
+      {/* Sidebar mobile toggle overlay backdrop */}
+      <div 
+        className={`sidebar-backdrop ${isSidebarOpen ? 'active' : ''}`}
+        onClick={() => setIsSidebarOpen(false)} 
+      />
+
       {/* 1. LEFT SIDEBAR NAVIGATION */}
-      <div className="glass-card" style={{
-        width: '260px',
+      <div className={`glass-card sidebar-nav ${isSidebarOpen ? 'sidebar-open' : ''}`} style={{
         borderRadius: '0px',
         borderRight: '1px solid rgba(255, 255, 255, 0.08)',
         borderTop: 'none',
@@ -616,12 +526,6 @@ export default function CleanSuperAdminPortal() {
         display: 'flex',
         flexDirection: 'column',
         padding: '32px 24px',
-        background: 'rgba(17, 24, 39, 0.95)',
-        position: 'fixed',
-        top: 0,
-        bottom: 0,
-        left: 0,
-        zIndex: 100,
       }}>
         {/* Branding header */}
         <div style={{ marginBottom: '40px', paddingLeft: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -656,7 +560,7 @@ export default function CleanSuperAdminPortal() {
         {/* Sidebar Tabs */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
           <button
-            onClick={() => setActiveTab('dashboard')}
+            onClick={() => { setActiveTab('dashboard'); setIsSidebarOpen(false); }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -678,7 +582,7 @@ export default function CleanSuperAdminPortal() {
             <span style={{ fontSize: '1.3rem' }}>📊</span> Dashboard
           </button>
           <button
-            onClick={() => setActiveTab('stores')}
+            onClick={() => { setActiveTab('stores'); setIsSidebarOpen(false); }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -700,7 +604,7 @@ export default function CleanSuperAdminPortal() {
             <span style={{ fontSize: '1.3rem' }}>🏪</span> Manage Stores
           </button>
           <button
-            onClick={() => setActiveTab('settings')}
+            onClick={() => { setActiveTab('settings'); setIsSidebarOpen(false); }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -743,11 +647,7 @@ export default function CleanSuperAdminPortal() {
             </div>
           </div>
           <button
-            onClick={() => {
-              if (confirm('Are you sure you want to securely close the PlatePixels Admin session and log out?')) {
-                window.location.href = '/';
-              }
-            }}
+            onClick={() => setIsLogoutModalOpen(true)}
             style={{
               width: '100%',
               background: 'rgba(239, 68, 68, 0.08)',
@@ -771,14 +671,54 @@ export default function CleanSuperAdminPortal() {
       </div>
 
       {/* 2. MAIN VIEWPORT CONTENT (OFFSET BY SIDEBAR WIDTH) */}
-      <div style={{
-        marginLeft: '260px',
-        width: 'calc(100% - 260px)',
-        padding: '40px 48px',
+      <div className="main-viewport" style={{
         background: 'var(--bg-primary)',
-        minHeight: '100vh',
-        boxSizing: 'border-box',
+        padding: '24px 32px',
       }}>
+        {/* GLOBAL HEADER BAR */}
+        <div className="glass-card" style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '12px 20px',
+          borderRadius: '10px',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          background: 'rgba(17, 24, 39, 0.7)',
+          backdropFilter: 'blur(12px)',
+          marginBottom: '20px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <button 
+              className="mobile-menu-btn" 
+              onClick={() => setIsSidebarOpen(true)}
+              title="Toggle Sidebar"
+            >
+              ☰
+            </button>
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '6px',
+              background: 'rgba(99, 102, 241, 0.1)',
+              border: '1px solid rgba(99, 102, 241, 0.2)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              fontSize: '1rem'
+            }}>
+              ⚙️
+            </div>
+            <div>
+              <h2 style={{ fontSize: '0.95rem', fontWeight: 800, margin: 0, color: '#ffffff', lineHeight: '1.2' }}>Super Admin Console</h2>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>PLATEPIXELS SYSTEM</span>
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <h3 style={{ fontSize: '0.9rem', fontWeight: 800, margin: 0, lineHeight: '1.1' }}>
+              <span className="text-gradient">Mino</span>Order
+            </h3>
+          </div>
+        </div>
         
         {/* TAB 1: CLEAN DASHBOARD WITH PERFORMANCE CHARTS */}
         {activeTab === 'dashboard' && (
@@ -2108,6 +2048,100 @@ export default function CleanSuperAdminPortal() {
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. PREMIUM GLASSMORPHIC LOGOUT CONFIRMATION MODAL */}
+      {isLogoutModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(5, 8, 16, 0.85)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 2000,
+          padding: '20px',
+          animation: 'fadeIn 0.25s ease'
+        }}>
+          <div className="glass-card" style={{
+            width: '100%',
+            maxWidth: '420px',
+            background: 'rgba(17, 24, 39, 0.9)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
+            borderRadius: '20px',
+            padding: '32px',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              borderRadius: '50%',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              margin: '0 auto 20px auto',
+              fontSize: '1.75rem',
+              color: '#ef4444'
+            }}>
+              ⚠️
+            </div>
+            <h3 style={{ fontSize: '1.35rem', fontWeight: 700, marginBottom: '12px', color: '#ffffff', fontFamily: 'var(--font-display)' }}>
+              Secure Logout Warning
+            </h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '28px' }}>
+              Are you sure you want to securely close the PlatePixels Admin session and log out? Any unsaved platform settings changes will be discarded.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setIsLogoutModalOpen(false)}
+                style={{
+                  flex: 1,
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '12px',
+                  color: '#ffffff',
+                  padding: '12px',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  transition: 'var(--transition-smooth)'
+                }}
+                className="modal-cancel-btn"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = '/';
+                }}
+                style={{
+                  flex: 1,
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: '#ffffff',
+                  padding: '12px',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.25)',
+                  transition: 'var(--transition-smooth)'
+                }}
+              >
+                🔒 Secure Logout
+              </button>
+            </div>
           </div>
         </div>
       )}
