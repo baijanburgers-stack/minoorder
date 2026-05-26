@@ -85,7 +85,6 @@ function StoreAdminMenuLayoutInner({
     { id: 'menu',         name: t.menuArchitect, icon: '🍔', href: '/store-admin/menu/categories' },
     { id: 'combo_engine', name: language === 'fr' ? 'Formules Combo' : language === 'nl' ? 'Combo Deals' : 'Combo Deals', icon: '🎁', href: '/store-admin/menu/combo-sandbox' },
     { id: 'vat_rules',    name: t.vatRules,      icon: '📐', href: '/store-admin/menu/vat-rules' },
-    { id: 'printers',     name: t.printers,      icon: '🖨️', href: '/store-admin/menu/printers' },
     { id: 'shifts',       name: t.shifts,        icon: '🔑', href: '/store-admin/menu/shifts' },
     { id: 'orders',       name: t.vatAudits,     icon: '🧾', href: '/store-admin/menu/orders' },
   ];
