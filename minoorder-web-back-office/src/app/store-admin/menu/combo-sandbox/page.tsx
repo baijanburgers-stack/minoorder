@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useMenu } from '../context';
 import { useToast } from '../../../../components/Toast';
 
@@ -37,6 +37,17 @@ export default function ComboBuilderPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isAvailable, setIsAvailable] = useState(true);
   const [activeCatTab, setActiveCatTab] = useState<string>('all');
+  const [comboImage, setComboImage] = useState<string>('');  // base64 data URL
+  const [imageDragging, setImageDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Image reader helper
+  const readImageFile = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setComboImage(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const iname = (it: any) =>
@@ -80,6 +91,7 @@ export default function ComboBuilderPage() {
     setSelectedIds([]);
     setIsAvailable(true);
     setActiveCatTab('all');
+    setComboImage('');
     setEditorOpen(true);
   };
 
@@ -90,6 +102,7 @@ export default function ComboBuilderPage() {
     setSelectedIds(deal.itemIds || []);
     setIsAvailable(deal.isAvailable);
     setActiveCatTab('all');
+    setComboImage(deal.imageUrl || '');
     setEditorOpen(true);
   };
 
@@ -99,14 +112,14 @@ export default function ComboBuilderPage() {
     const name = comboName.trim().toUpperCase();
     if (editingId) {
       setDeals(deals.map((d: any) => d.id === editingId
-        ? { ...d, name, nameEn: name, nameFr: name, nameNl: name, fixedPrice: priceNum, itemIds: selectedIds, isAvailable }
+        ? { ...d, name, nameEn: name, nameFr: name, nameNl: name, fixedPrice: priceNum, itemIds: selectedIds, isAvailable, imageUrl: comboImage }
         : d
       ));
       showToast(`"${name}" updated.`, 'success');
     } else {
       setDeals([...deals, {
         id: 'd_' + Date.now(), name, nameEn: name, nameFr: name, nameNl: name,
-        fixedPrice: priceNum, itemIds: selectedIds, isAvailable,
+        fixedPrice: priceNum, itemIds: selectedIds, isAvailable, imageUrl: comboImage,
       }]);
       showToast(`"${name}" created.`, 'success');
     }
@@ -179,7 +192,18 @@ export default function ComboBuilderPage() {
                 {/* Card top bar – gradient based on availability */}
                 <div style={{ height: '3px', background: deal.isAvailable ? 'linear-gradient(90deg, #6366f1, #10b981)' : 'rgba(255,255,255,0.06)' }} />
 
-                <div style={{ padding: '16px 18px' }}>
+                {/* Combo image banner */}
+                {deal.imageUrl ? (
+                  <div style={{ height: '140px', overflow: 'hidden', position: 'relative' }}>
+                    <img src={deal.imageUrl} alt={dname(deal)}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 50%, rgba(10,14,28,0.85) 100%)' }} />
+                  </div>
+                ) : (
+                  <div style={{ height: '80px', background: 'linear-gradient(135deg, rgba(99,102,241,0.06), rgba(16,185,129,0.04))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', opacity: 0.5 }}>🎁</div>
+                )}
+
+                <div style={{ padding: '14px 18px 16px' }}>
                   {/* Header row */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', gap: '8px' }}>
                     <div style={{ minWidth: 0 }}>
@@ -274,6 +298,50 @@ export default function ComboBuilderPage() {
 
               {/* ── LEFT: Config panel ── */}
               <div style={{ borderRight: '1px solid rgba(255,255,255,0.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto' }}>
+
+                {/* ── Image Upload Zone ── */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '7px' }}>
+                    {language === 'fr' ? 'Image du Combo' : language === 'nl' ? 'Combo Afbeelding' : 'Combo Image'}
+                  </label>
+
+                  {/* Hidden file input */}
+                  <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) readImageFile(f); e.target.value = ''; }} />
+
+                  {comboImage ? (
+                    /* Preview */
+                    <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', height: '130px' }}>
+                      <img src={comboImage} alt="combo" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 40%, rgba(5,8,18,0.7) 100%)' }} />
+                      <div style={{ position: 'absolute', bottom: '8px', right: '8px', display: 'flex', gap: '5px' }}>
+                        <button type="button" onClick={() => fileInputRef.current?.click()}
+                          style={{ padding: '4px 9px', borderRadius: '5px', border: 'none', background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)', color: '#fff', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer' }}>
+                          {language === 'fr' ? 'Changer' : language === 'nl' ? 'Wijzigen' : 'Change'}
+                        </button>
+                        <button type="button" onClick={() => setComboImage('')}
+                          style={{ padding: '4px 9px', borderRadius: '5px', border: 'none', background: 'rgba(239,68,68,0.5)', backdropFilter: 'blur(8px)', color: '#fff', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer' }}>
+                          {language === 'fr' ? 'Suppr.' : language === 'nl' ? 'Verw.' : 'Remove'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Drop zone */
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={e => { e.preventDefault(); setImageDragging(true); }}
+                      onDragLeave={() => setImageDragging(false)}
+                      onDrop={e => { e.preventDefault(); setImageDragging(false); const f = e.dataTransfer.files?.[0]; if (f) readImageFile(f); }}
+                      style={{ border: `2px dashed ${imageDragging ? 'rgba(99,102,241,0.6)' : 'rgba(99,102,241,0.2)'}`, borderRadius: '8px', padding: '22px 14px', cursor: 'pointer', textAlign: 'center', background: imageDragging ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.02)', transition: 'all 0.18s' }}
+                    >
+                      <div style={{ fontSize: '1.6rem', marginBottom: '6px' }}>📷</div>
+                      <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#a5b4fc', margin: 0, marginBottom: '2px' }}>
+                        {language === 'fr' ? 'Cliquez ou glissez une image' : language === 'nl' ? 'Klik of sleep een afbeelding' : 'Click or drag an image'}
+                      </p>
+                      <p style={{ fontSize: '0.62rem', color: 'var(--text-muted)', margin: 0 }}>JPG, PNG, WEBP</p>
+                    </div>
+                  )}
+                </div>
 
                 {/* Combo Name */}
                 <div>
