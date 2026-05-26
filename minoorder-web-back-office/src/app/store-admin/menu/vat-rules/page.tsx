@@ -14,13 +14,22 @@ export default function VatRulesPage() {
   const { storeVatRates, setStoreVatRates } = useMenu();
   const { showToast } = useToast();
 
-  const [isLocked, setIsLocked] = useState(true); // ← starts locked
-  const [foodTakeaway,      setFoodTakeaway]      = useState(storeVatRates.foodTakeaway.toString());
-  const [foodDineIn,        setFoodDineIn]        = useState(storeVatRates.foodDineIn.toString());
-  const [softTakeaway,      setSoftTakeaway]      = useState(storeVatRates.softDrinkTakeaway.toString());
-  const [softDineIn,        setSoftDineIn]        = useState(storeVatRates.softDrinkDineIn.toString());
-  const [alcoholTakeaway,   setAlcoholTakeaway]   = useState(storeVatRates.alcoholTakeaway.toString());
-  const [alcoholDineIn,     setAlcoholDineIn]     = useState(storeVatRates.alcoholDineIn.toString());
+  const fmt = (n: number) => n.toFixed(2);
+
+  const [isLocked, setIsLocked] = useState(true);
+  const [foodTakeaway,    setFoodTakeaway]    = useState(fmt(storeVatRates.foodTakeaway));
+  const [foodDineIn,      setFoodDineIn]      = useState(fmt(storeVatRates.foodDineIn));
+  const [softTakeaway,    setSoftTakeaway]    = useState(fmt(storeVatRates.softDrinkTakeaway));
+  const [softDineIn,      setSoftDineIn]      = useState(fmt(storeVatRates.softDrinkDineIn));
+  const [alcoholTakeaway, setAlcoholTakeaway] = useState(fmt(storeVatRates.alcoholTakeaway));
+  const [alcoholDineIn,   setAlcoholDineIn]   = useState(fmt(storeVatRates.alcoholDineIn));
+
+  // POS currency-style input: digits only, last 2 are decimals
+  const posInput = (setter: (v: string) => void) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const digits = e.target.value.replace(/\D/g, '');
+      setter(digits ? (parseInt(digits, 10) / 100).toFixed(2) : '0.00');
+    };
 
   const vals: Record<string, string> = {
     foodTakeaway, foodDineIn, softDrinkTakeaway: softTakeaway,
@@ -35,13 +44,12 @@ export default function VatRulesPage() {
   const handleEdit = () => setIsLocked(false);
 
   const handleCancel = () => {
-    // Revert to last saved values
-    setFoodTakeaway(storeVatRates.foodTakeaway.toString());
-    setFoodDineIn(storeVatRates.foodDineIn.toString());
-    setSoftTakeaway(storeVatRates.softDrinkTakeaway.toString());
-    setSoftDineIn(storeVatRates.softDrinkDineIn.toString());
-    setAlcoholTakeaway(storeVatRates.alcoholTakeaway.toString());
-    setAlcoholDineIn(storeVatRates.alcoholDineIn.toString());
+    setFoodTakeaway(fmt(storeVatRates.foodTakeaway));
+    setFoodDineIn(fmt(storeVatRates.foodDineIn));
+    setSoftTakeaway(fmt(storeVatRates.softDrinkTakeaway));
+    setSoftDineIn(fmt(storeVatRates.softDrinkDineIn));
+    setAlcoholTakeaway(fmt(storeVatRates.alcoholTakeaway));
+    setAlcoholDineIn(fmt(storeVatRates.alcoholDineIn));
     setIsLocked(true);
   };
 
@@ -142,10 +150,13 @@ export default function VatRulesPage() {
                     </div>
                   ) : (
                     <div style={{ position: 'relative' }}>
-                      <input type="number" step="0.01" min="0" max="100" className="form-input"
-                        style={{ padding: '8px 28px 8px 10px', fontSize: '0.9rem', fontWeight: 700, color: g.color }}
-                        value={vals[g.tkKey]} onChange={e => setters[g.tkKey](e.target.value)} required />
-                      <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, pointerEvents: 'none' }}>%</span>
+                      <input
+                        type="text" inputMode="numeric" className="form-input"
+                        value={vals[g.tkKey]}
+                        onChange={posInput(setters[g.tkKey])}
+                        style={{ paddingRight: '28px', textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.15rem', color: g.color, letterSpacing: '-0.01em' }}
+                      />
+                      <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 800, pointerEvents: 'none' }}>%</span>
                     </div>
                   )}
                 </div>
@@ -163,10 +174,13 @@ export default function VatRulesPage() {
                     </div>
                   ) : (
                     <div style={{ position: 'relative' }}>
-                      <input type="number" step="0.01" min="0" max="100" className="form-input"
-                        style={{ padding: '8px 28px 8px 10px', fontSize: '0.9rem', fontWeight: 700, color: g.color }}
-                        value={vals[g.diKey]} onChange={e => setters[g.diKey](e.target.value)} required />
-                      <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, pointerEvents: 'none' }}>%</span>
+                      <input
+                        type="text" inputMode="numeric" className="form-input"
+                        value={vals[g.diKey]}
+                        onChange={posInput(setters[g.diKey])}
+                        style={{ paddingRight: '28px', textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.15rem', color: g.color, letterSpacing: '-0.01em' }}
+                      />
+                      <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 800, pointerEvents: 'none' }}>%</span>
                     </div>
                   )}
                 </div>
