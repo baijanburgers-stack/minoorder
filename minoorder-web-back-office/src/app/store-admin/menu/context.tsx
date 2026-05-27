@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 type VatCategory = 'food' | 'soft_drink' | 'alcohol' | 'service';
 
@@ -19,13 +20,13 @@ export interface MenuItem {
 
 interface MenuContextType {
   items: MenuItem[];
-  setItems: React.Dispatch<React.SetStateAction<MenuItem[]>>;
+  setItems: (action: React.SetStateAction<MenuItem[]>) => void;
   categories: any[];
-  setCategories: React.Dispatch<React.SetStateAction<any[]>>;
+  setCategories: (action: React.SetStateAction<any[]>) => void;
   modifierGroups: any[];
-  setModifierGroups: React.Dispatch<React.SetStateAction<any[]>>;
+  setModifierGroups: (action: React.SetStateAction<any[]>) => void;
   deals: any[];
-  setDeals: React.Dispatch<React.SetStateAction<any[]>>;
+  setDeals: (action: React.SetStateAction<any[]>) => void;
   printers: any[];
   setPrinters: React.Dispatch<React.SetStateAction<any[]>>;
   shifts: any[];
@@ -40,115 +41,436 @@ interface MenuContextType {
 
 const MenuContext = createContext<MenuContextType | undefined>(undefined);
 
-// ─── Safe localStorage helpers (client-only) ────────────────────────────────
-function lsGet<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-function lsSet(key: string, value: unknown) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
-}
-
-// ─── Seed data ──────────────────────────────────────────────────────────────
-const SEED_ITEMS: MenuItem[] = [
-  { id: '1', name: 'Classic Beef Burger', nameEn: 'Classic Beef Burger', nameFr: 'Burger au Bœuf Classique', nameNl: 'Klassieke Rundvlees Burger', grossPrice: 10.00, vatCategory: 'food', categoryId: 'c1', modifierIds: ['mg1', 'mg2'] },
-  { id: '2', name: 'Gourmet Double Cheese', nameEn: 'Gourmet Double Cheese', nameFr: 'Double Cheese Gourmet', nameNl: 'Gourmet Dubbele Kaas', grossPrice: 13.50, vatCategory: 'food', categoryId: 'c1', modifierIds: ['mg1', 'mg2'] },
-  { id: '3', name: 'Frites Classic Belgian', nameEn: 'Frites Classic Belgian', nameFr: 'Frites Belges Classiques', nameNl: 'Klassieke Belgische Frieten', grossPrice: 3.00, vatCategory: 'food', categoryId: 'c2' },
-  { id: '4', name: 'Sweet Potato Fries', nameEn: 'Sweet Potato Fries', nameFr: 'Frites de Patates Douces', nameNl: 'Zoete Aardappel Friet', grossPrice: 4.00, vatCategory: 'food', categoryId: 'c2' },
-  { id: '5', name: 'Coca-Cola Zero 33cl', nameEn: 'Coca-Cola Zero 33cl', nameFr: 'Coca-Cola Zéro 33cl', nameNl: 'Coca-Cola Zero 33cl', grossPrice: 2.50, vatCategory: 'soft_drink', categoryId: 'c3' },
-  { id: '6', name: 'Duvel Blonde Ale 33cl', nameEn: 'Duvel Blonde Ale 33cl', nameFr: 'Bière Blonde Duvel 33cl', nameNl: 'Duvel Blond Bier 33cl', grossPrice: 4.80, vatCategory: 'alcohol', categoryId: 'c3' },
-  { id: '7', name: 'Vanilla Milkshake', nameEn: 'Vanilla Milkshake', nameFr: 'Milkshake à la Vanille', nameNl: 'Vanille Milkshake', grossPrice: 4.50, vatCategory: 'soft_drink', categoryId: 'c3' },
-];
-const SEED_CATEGORIES = [
-  { id: 'c1', name: 'Burgers 🍔', nameEn: 'Burgers 🍔', nameFr: 'Burgers 🍔', nameNl: 'Burgers 🍔', sortOrder: 1, visiblePos: true, visibleKiosk: true },
-  { id: 'c2', name: 'Sides 🍟', nameEn: 'Sides 🍟', nameFr: 'Accompagnements 🍟', nameNl: 'Bijgerechten 🍟', sortOrder: 2, visiblePos: true, visibleKiosk: true },
-  { id: 'c3', name: 'Drinks 🥤', nameEn: 'Drinks 🥤', nameFr: 'Boissons 🥤', nameNl: 'Dranken 🥤', sortOrder: 3, visiblePos: true, visibleKiosk: true },
-];
-const SEED_MODIFIERS = [
-  { id: 'mg1', name: 'Choose Burger Temperature 🥩', nameEn: 'Choose Burger Temperature 🥩', nameFr: 'Choisir la Cuisson du Burger 🥩', nameNl: 'Kies Bakwijze Burger 🥩', minSelection: 1, maxSelection: 1, isRequired: true, options: [
-    { id: 'mo1', name: 'Medium Rare', nameEn: 'Medium Rare', nameFr: 'Bleu / Saignant', nameNl: 'Medium Rare', upcharge: 0.00 },
-    { id: 'mo2', name: 'Medium Well', nameEn: 'Medium Well', nameFr: 'À Point', nameNl: 'Medium Gekookt', upcharge: 0.00 },
-    { id: 'mo3', name: 'Well Done', nameEn: 'Well Done', nameFr: 'Bien Cuit', nameNl: 'Goed Doorgeraden', upcharge: 0.00 },
-  ]},
-  { id: 'mg2', name: 'Add Extra Toppings 🧀', nameEn: 'Add Extra Toppings 🧀', nameFr: 'Ajouter des Suppléments 🧀', nameNl: 'Extra Toppings Toevoegen 🧀', minSelection: 0, maxSelection: 4, isRequired: false, options: [
-    { id: 'mo4', name: 'Smoked Crispy Bacon', nameEn: 'Smoked Crispy Bacon', nameFr: 'Bacon Croustillant Fumé', nameNl: 'Gerookt Krokant Spek', upcharge: 1.50 },
-    { id: 'mo5', name: 'Aged Cheddar Cheese', nameEn: 'Aged Cheddar Cheese', nameFr: 'Fromage Cheddar Affiné', nameNl: 'Gerijpte Cheddarkaas', upcharge: 1.00 },
-    { id: 'mo6', name: 'Guacamole Spread', nameEn: 'Guacamole Spread', nameFr: "Purée d'Avocat Guacamole", nameNl: 'Guacamole Spread', upcharge: 1.80 },
-  ]},
-];
-const SEED_DEALS = [
-  { id: 'd1', name: 'Standard Burger Combo Deal 🍔🍟🥤', nameEn: 'Standard Burger Combo Deal 🍔🍟🥤', nameFr: 'Offre Combo Burger Standard 🍔🍟🥤', nameNl: 'Standaard Burger Combodeal 🍔🍟🥤', fixedPrice: 12.00, itemIds: ['1', '3', '5'], isAvailable: true },
-  { id: 'd2', name: 'Double Feast Deal 🍔🍔🍟🥤🥤', nameEn: 'Double Feast Deal 🍔🍔🍟🥤🥤', nameFr: 'Offre Double Festin 🍔🍔🍟🥤🥤', nameNl: 'Dubbel Feestdeal 🍔🍔🍟🥤🥤', fixedPrice: 22.00, itemIds: ['1', '2', '3', '5', '7'], isAvailable: true },
-];
-const SEED_VAT = { foodTakeaway: 6.00, foodDineIn: 12.00, softDrinkTakeaway: 6.00, softDrinkDineIn: 12.00, alcoholTakeaway: 21.00, alcoholDineIn: 21.00 };
-
-const LS = {
-  vatRates:   'mino_vat_rates',
-  items:      'mino_items',
-  categories: 'mino_categories',
-  modifiers:  'mino_modifiers',
-  deals:      'mino_deals',
-  language:   'mino_language',
-};
+const isUuid = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
 export function MenuProvider({ children }: { children: React.ReactNode }) {
+  const [language, setLanguage] = useState<'en' | 'fr' | 'nl'>('en');
+  const [items, setItemsState] = useState<MenuItem[]>([]);
+  const [categories, setCategoriesState] = useState<any[]>([]);
+  const [modifierGroups, setModifierGroupsState] = useState<any[]>([]);
+  const [deals, setDealsState] = useState<any[]>([]);
+  const [storeVatRates, setStoreVatRates] = useState<any>({
+    foodTakeaway: 6.00,
+    foodDineIn: 12.00,
+    softDrinkTakeaway: 6.00,
+    softDrinkDineIn: 12.00,
+    alcoholTakeaway: 21.00,
+    alcoholDineIn: 21.00
+  });
 
-  // ── Initialize with SEED data so server & client first-render match ────────
-  // (prevents hydration mismatch — localStorage is read AFTER mount)
-  const [hydrated,       setHydrated]       = useState(false);
-  const [language,       setLanguage]       = useState<'en' | 'fr' | 'nl'>('en');
-  const [items,          setItems]          = useState<MenuItem[]>(SEED_ITEMS);
-  const [categories,     setCategories]     = useState<any[]>(SEED_CATEGORIES);
-  const [modifierGroups, setModifierGroups] = useState<any[]>(SEED_MODIFIERS);
-  const [deals,          setDeals]          = useState<any[]>(SEED_DEALS);
-  const [storeVatRates,  setStoreVatRates]  = useState<any>(SEED_VAT);
+  const [printers, setPrinters] = useState<any[]>([]);
+  const [shifts, setShifts] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
 
-  // Session-only (no persistence needed yet)
-  const [printers, setPrinters] = useState([
-    { id: 'p1', name: 'Star Counter Receipt (POS)', connectionType: 'ip', address: '192.168.1.100', role: 'receipt' },
-    { id: 'p2', name: 'Epson Kitchen Hot Pass', connectionType: 'usb', address: 'COM3', role: 'kitchen' },
-    { id: 'p3', name: 'Bar Drinks Printer', connectionType: 'ip', address: '192.168.1.105', role: 'bar' },
-  ]);
-  const [shifts, setShifts] = useState([
-    { id: 'shift-098', cashier: 'Marie Laurent', terminalName: 'Kiosk-01', terminalType: 'kiosk', opened: '2026-05-23 09:00:00', closed: '2026-05-23 17:30:00', openingCash: 0.00, closingCash: 0.00, status: 'Closed', xReportHash: 'X_SIG_4401_SHA256_FDM_BE', xReportTime: '2026-05-23 13:00:00', zReportHash: 'Z_SIG_4402_SHA256_FDM_BE', totalOrders: 64, grossRevenue: 892.40, totalVat: 89.24, cardTotal: 892.40, cashTotal: 0.00 },
-    { id: 'shift-099', cashier: 'Ahmed Bensaid', terminalName: 'POS-01', terminalType: 'pos', opened: '2026-05-23 08:30:00', closed: '2026-05-23 16:45:00', openingCash: 150.00, closingCash: 745.80, status: 'Closed', xReportHash: 'X_SIG_4410_SHA256_FDM_BE', xReportTime: '2026-05-23 12:30:00', zReportHash: 'Z_SIG_4411_SHA256_FDM_BE', totalOrders: 47, grossRevenue: 1231.50, totalVat: 123.15, cardTotal: 635.70, cashTotal: 595.80 },
-    { id: 'shift-100', cashier: 'Elena Rossi', terminalName: 'POS-02', terminalType: 'pos', opened: '2026-05-24 07:45:00', closed: '2026-05-24 15:30:00', openingCash: 200.00, closingCash: 1124.30, status: 'Closed', xReportHash: 'X_SIG_5501_SHA256_FDM_BE', xReportTime: '2026-05-24 12:00:00', zReportHash: 'Z_SIG_5502_SHA256_FDM_BE', totalOrders: 58, grossRevenue: 1580.60, totalVat: 158.06, cardTotal: 656.30, cashTotal: 924.30 },
-    { id: 'shift-101', cashier: 'Marie Laurent', terminalName: 'Kiosk-01', terminalType: 'kiosk', opened: '2026-05-24 09:00:00', closed: '2026-05-24 21:00:00', openingCash: 0.00, closingCash: 0.00, status: 'Closed', xReportHash: 'X_SIG_5510_SHA256_FDM_BE', xReportTime: '2026-05-24 15:00:00', zReportHash: 'Z_SIG_5511_SHA256_FDM_BE', totalOrders: 91, grossRevenue: 1345.20, totalVat: 134.52, cardTotal: 1345.20, cashTotal: 0.00 },
-    { id: 'shift-102', cashier: 'Ahmed Bensaid', terminalName: 'Kiosk-02', terminalType: 'kiosk', opened: '2026-05-24 09:00:00', closed: '2026-05-24 21:00:00', openingCash: 0.00, closingCash: 0.00, status: 'Closed', xReportHash: 'X_SIG_5520_SHA256_FDM_BE', xReportTime: '2026-05-24 14:30:00', zReportHash: 'Z_SIG_5521_SHA256_FDM_BE', totalOrders: 78, grossRevenue: 1102.80, totalVat: 110.28, cardTotal: 1102.80, cashTotal: 0.00 },
-    { id: 'shift-103', cashier: 'John Doe', terminalName: 'POS-01', terminalType: 'pos', opened: '2026-05-25 08:00:00', closed: '2026-05-25 16:30:00', openingCash: 150.00, closingCash: 987.60, status: 'Closed', xReportHash: 'X_SIG_6601_SHA256_FDM_BE', xReportTime: '2026-05-25 12:15:00', zReportHash: 'Z_SIG_6602_SHA256_FDM_BE', totalOrders: 52, grossRevenue: 1420.30, totalVat: 142.03, cardTotal: 582.70, cashTotal: 837.60 },
-    { id: 'shift-104', cashier: 'John Doe', terminalName: 'POS-02', terminalType: 'pos', opened: '2026-05-25 08:30:12', closed: '2026-05-25 16:45:00', openingCash: 150.00, closingCash: 852.50, status: 'Closed', xReportHash: 'X_SIG_8871_SHA256_FDM_BE', xReportTime: '2026-05-25 12:30:00', zReportHash: 'Z_SIG_8872_SHA256_FDM_BE', totalOrders: 39, grossRevenue: 1075.40, totalVat: 107.54, cardTotal: 372.90, cashTotal: 702.50 },
-    { id: 'shift-105', cashier: 'Sarah Connor', terminalName: 'POS-01', terminalType: 'pos', opened: '2026-05-26 17:00:00', closed: null, openingCash: 150.00, closingCash: 0.00, status: 'Active', xReportHash: '', xReportTime: null, zReportHash: '', totalOrders: 12, grossRevenue: 284.60, totalVat: 28.46, cardTotal: 134.60, cashTotal: 150.00 },
-    { id: 'shift-106', cashier: 'Marie Laurent', terminalName: 'Kiosk-01', terminalType: 'kiosk', opened: '2026-05-26 09:00:00', closed: null, openingCash: 0.00, closingCash: 0.00, status: 'Active', xReportHash: '', xReportTime: null, zReportHash: '', totalOrders: 31, grossRevenue: 467.20, totalVat: 46.72, cardTotal: 467.20, cashTotal: 0.00 },
-  ]);
-  const [orders, setOrders] = useState([
-    { id: 'ord-9921', orderNumber: 'T-12', time: '2026-05-25 19:42:15', gross: 29.50, net: 26.85, vat: 2.65, method: 'Card', receiptNumber: 'BE-STORE01-20260525-T-12', fdmHash: 'SIG_ab78d91_SHA256_FDM' },
-    { id: 'ord-9922', orderNumber: 'D-08', time: '2026-05-25 20:05:33', gross: 12.00, net: 11.32, vat: 0.68, method: 'Bancontact', receiptNumber: 'BE-STORE01-20260525-D-08', fdmHash: 'SIG_bc99e12_SHA256_FDM' },
-    { id: 'ord-9923', orderNumber: 'T-13', time: '2026-05-25 20:15:00', gross: 42.10, net: 37.80, vat: 4.30, method: 'Payconiq', receiptNumber: 'BE-STORE01-20260525-T-13', fdmHash: 'SIG_de44f89_SHA256_FDM' },
-  ]);
+  // Load active store data from Supabase
+  const loadStoreData = async () => {
+    try {
+      let storeId = localStorage.getItem('mino_active_store_id');
+      
+      if (!storeId || storeId === 'undefined') {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: userStore } = await supabase
+            .from('store_users')
+            .select('store_id, stores(name)')
+            .eq('user_id', user.id)
+            .limit(1)
+            .maybeSingle();
+            
+          if (userStore) {
+            storeId = userStore.store_id;
+            localStorage.setItem('mino_active_store_id', storeId!);
+            localStorage.setItem('mino_active_store_name', (userStore.stores as any)?.name || 'Live Store');
+          }
+        }
+      }
 
-  // ── Hydrate from localStorage AFTER first mount (client-only) ─────────────
+      if (!storeId || storeId === 'undefined') return;
+
+      // 1. Fetch Categories
+      const { data: catData } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('store_id', storeId)
+        .order('sort_order', { ascending: true });
+
+      const formattedCats = (catData || []).map(c => ({
+        id: c.id,
+        name: c.name?.en || c.name?.nl || c.name?.fr || '',
+        nameEn: c.name?.en || '',
+        nameFr: c.name?.fr || '',
+        nameNl: c.name?.nl || '',
+        sortOrder: c.sort_order,
+        visiblePos: c.is_visible_pos,
+        visibleKiosk: c.is_visible_kiosk
+      }));
+      setCategoriesState(formattedCats);
+
+      // 2. Fetch Items
+      const { data: itemData } = await supabase
+        .from('items')
+        .select(`
+          *,
+          vat_rules (
+            category
+          )
+        `)
+        .eq('store_id', storeId)
+        .order('sort_order', { ascending: true });
+
+      const formattedItems = (itemData || []).map(i => ({
+        id: i.id,
+        name: i.name?.en || i.name?.nl || i.name?.fr || '',
+        nameEn: i.name?.en || '',
+        nameFr: i.name?.fr || '',
+        nameNl: i.name?.nl || '',
+        grossPrice: parseFloat(i.gross_price),
+        vatCategory: (i.vat_rules as any)?.category || 'food',
+        categoryId: i.category_id,
+        imageUrl: i.image_url || '',
+        modifierIds: []
+      }));
+      setItemsState(formattedItems);
+
+      // 3. Fetch Modifiers
+      const { data: modData } = await supabase
+        .from('modifier_groups')
+        .select(`
+          *,
+          modifier_options (*)
+        `)
+        .eq('store_id', storeId);
+
+      const formattedMods = (modData || []).map(mg => ({
+        id: mg.id,
+        name: mg.name?.en || mg.name?.nl || mg.name?.fr || '',
+        nameEn: mg.name?.en || '',
+        nameFr: mg.name?.fr || '',
+        nameNl: mg.name?.nl || '',
+        minSelection: mg.min_selection,
+        maxSelection: mg.max_selection,
+        isRequired: mg.is_required,
+        options: (mg.modifier_options || []).map((o: any) => ({
+          id: o.id,
+          name: o.name?.en || o.name?.nl || o.name?.fr || '',
+          nameEn: o.name?.en || '',
+          nameFr: o.name?.fr || '',
+          nameNl: o.name?.nl || '',
+          upcharge: parseFloat(o.gross_price)
+        }))
+      }));
+      setModifierGroupsState(formattedMods);
+
+      // 4. Fetch VAT rules of store country
+      const { data: storeInfo } = await supabase
+        .from('stores')
+        .select('country')
+        .eq('id', storeId)
+        .limit(1)
+        .maybeSingle();
+
+      if (storeInfo) {
+        const { data: rules } = await supabase
+          .from('vat_rules')
+          .select('*')
+          .eq('country', storeInfo.country);
+
+        const vatRates = {
+          foodTakeaway: 6,
+          foodDineIn: 12,
+          softDrinkTakeaway: 6,
+          softDrinkDineIn: 12,
+          alcoholTakeaway: 21,
+          alcoholDineIn: 21
+        };
+
+        rules?.forEach((r: any) => {
+          if (r.category === 'food') {
+            vatRates.foodTakeaway = parseFloat(r.takeaway_rate);
+            vatRates.foodDineIn = parseFloat(r.dine_in_rate);
+          } else if (r.category === 'soft_drink') {
+            vatRates.softDrinkTakeaway = parseFloat(r.takeaway_rate);
+            vatRates.softDrinkDineIn = parseFloat(r.dine_in_rate);
+          } else if (r.category === 'alcohol') {
+            vatRates.alcoholTakeaway = parseFloat(r.takeaway_rate);
+            vatRates.alcoholDineIn = parseFloat(r.dine_in_rate);
+          }
+        });
+        setStoreVatRates(vatRates);
+      }
+
+      // 5. Fetch Printers
+      const { data: printersData } = await supabase
+        .from('printer_configs')
+        .select('*')
+        .eq('store_id', storeId);
+
+      setPrinters((printersData || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        connectionType: p.connection_type,
+        address: p.address,
+        role: p.role
+      })));
+
+      // 6. Fetch Shifts
+      const { data: shiftsData } = await supabase
+        .from('shifts')
+        .select(`
+          *,
+          profiles (first_name, last_name),
+          devices (name, type)
+        `)
+        .eq('store_id', storeId)
+        .order('opened_at', { ascending: false });
+
+      setShifts((shiftsData || []).map(s => ({
+        id: s.id,
+        cashier: s.profiles ? `${s.profiles.first_name} ${s.profiles.last_name}` : 'Operator',
+        terminalName: s.devices?.name || 'POS',
+        terminalType: s.devices?.type || 'pos',
+        opened: s.opened_at,
+        closed: s.closed_at || null,
+        openingCash: parseFloat(s.opening_cash),
+        closingCash: s.closing_cash ? parseFloat(s.closing_cash) : null,
+        status: s.closed_at ? 'Closed' : 'Active',
+        totalOrders: 0,
+        grossRevenue: 0,
+        totalVat: 0,
+        cardTotal: 0,
+        cashTotal: 0
+      })));
+
+      // 7. Fetch Orders
+      const { data: ordersData } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          payments (*)
+        `)
+        .eq('store_id', storeId)
+        .order('created_at', { ascending: false });
+
+      setOrders((ordersData || []).map(o => ({
+        id: o.id,
+        orderNumber: o.order_number,
+        time: o.created_at,
+        gross: parseFloat(o.total_gross),
+        net: parseFloat(o.total_net),
+        vat: parseFloat(o.total_vat),
+        method: o.payments?.[0]?.method || 'Card',
+        receiptNumber: `BE-STORE-${o.order_number}`,
+        fdmHash: 'SIG_FDM_ACTIVE'
+      })));
+    } catch (err) {
+      console.error('Failed to load store operations context:', err);
+    }
+  };
+
   useEffect(() => {
-    setLanguage(      lsGet(LS.language,   'en'));
-    setItems(         lsGet(LS.items,      SEED_ITEMS));
-    setCategories(    lsGet(LS.categories, SEED_CATEGORIES));
-    setModifierGroups(lsGet(LS.modifiers,  SEED_MODIFIERS));
-    setDeals(         lsGet(LS.deals,      SEED_DEALS));
-    setStoreVatRates( lsGet(LS.vatRates,   SEED_VAT));
-    setHydrated(true); // ← only NOW allow persist effects to write
+    loadStoreData();
   }, []);
 
-  // ── Persist to localStorage — ONLY after hydration is complete ─────────────
-  // Guards prevent overwriting saved data with seeds on initial render
-  useEffect(() => { if (hydrated) lsSet(LS.language,   language);       }, [hydrated, language]);
-  useEffect(() => { if (hydrated) lsSet(LS.items,      items);          }, [hydrated, items]);
-  useEffect(() => { if (hydrated) lsSet(LS.categories, categories);     }, [hydrated, categories]);
-  useEffect(() => { if (hydrated) lsSet(LS.modifiers,  modifierGroups); }, [hydrated, modifierGroups]);
-  useEffect(() => { if (hydrated) lsSet(LS.deals,      deals);          }, [hydrated, deals]);
-  useEffect(() => { if (hydrated) lsSet(LS.vatRates,   storeVatRates);  }, [hydrated, storeVatRates]);
+  // Expose transparent CRUD synchronization state setters
+  const setItems = async (action: React.SetStateAction<MenuItem[]>) => {
+    const nextItems = typeof action === 'function' ? action(items) : action;
+    const resolvedItems = nextItems.map(item => ({
+      ...item,
+      id: isUuid(item.id) ? item.id : crypto.randomUUID()
+    }));
+
+    setItemsState(resolvedItems);
+
+    const storeId = localStorage.getItem('mino_active_store_id');
+    if (!storeId) return;
+
+    try {
+      // Find deleted items
+      const deletedIds = items.filter(item => !resolvedItems.some(ri => ri.id === item.id)).map(item => item.id);
+      if (deletedIds.length > 0) {
+        await supabase.from('items').delete().in('id', deletedIds);
+      }
+
+      // Find added or modified items
+      const changedItems = resolvedItems.filter(ri => {
+        const prev = items.find(item => item.id === ri.id);
+        return !prev || JSON.stringify(prev) !== JSON.stringify(ri);
+      });
+
+      for (const item of changedItems) {
+        const { data: rules } = await supabase
+          .from('vat_rules')
+          .select('id')
+          .eq('category', item.vatCategory)
+          .limit(1);
+
+        const ruleId = rules?.[0]?.id;
+        if (!ruleId) continue;
+
+        await supabase.from('items').upsert({
+          id: item.id,
+          store_id: storeId,
+          category_id: item.categoryId || '00000000-0000-0000-0000-000000000000',
+          name: { en: item.nameEn || item.name, fr: item.nameFr || item.name, nl: item.nameNl || item.name },
+          gross_price: item.grossPrice,
+          vat_rule_id: ruleId,
+          is_available: true,
+          is_draft: false
+        });
+      }
+    } catch (err) {
+      console.error('Failed to sync items change to Supabase:', err);
+    }
+  };
+
+  const setCategories = async (action: React.SetStateAction<any[]>) => {
+    const nextCats = typeof action === 'function' ? action(categories) : action;
+    const resolvedCats = nextCats.map(c => ({
+      ...c,
+      id: isUuid(c.id) ? c.id : crypto.randomUUID()
+    }));
+
+    setCategoriesState(resolvedCats);
+
+    const storeId = localStorage.getItem('mino_active_store_id');
+    if (!storeId) return;
+
+    try {
+      const deletedIds = categories.filter(c => !resolvedCats.some(rc => rc.id === c.id)).map(c => c.id);
+      if (deletedIds.length > 0) {
+        await supabase.from('categories').delete().in('id', deletedIds);
+      }
+
+      const changedCats = resolvedCats.filter(rc => {
+        const prev = categories.find(c => c.id === rc.id);
+        return !prev || JSON.stringify(prev) !== JSON.stringify(rc);
+      });
+
+      for (const cat of changedCats) {
+        await supabase.from('categories').upsert({
+          id: cat.id,
+          store_id: storeId,
+          name: { en: cat.nameEn || cat.name, fr: cat.nameFr || cat.name, nl: cat.nameNl || cat.name },
+          sort_order: cat.sortOrder || 0,
+          is_visible_pos: cat.visiblePos !== false,
+          is_visible_kiosk: cat.visibleKiosk !== false
+        });
+      }
+    } catch (err) {
+      console.error('Failed to sync categories changes to Supabase:', err);
+    }
+  };
+
+  const setModifierGroups = async (action: React.SetStateAction<any[]>) => {
+    const nextGroups = typeof action === 'function' ? action(modifierGroups) : action;
+    const resolvedGroups = nextGroups.map(g => ({
+      ...g,
+      id: isUuid(g.id) ? g.id : crypto.randomUUID(),
+      options: (g.options || []).map((o: any) => ({
+        ...o,
+        id: isUuid(o.id) ? o.id : crypto.randomUUID()
+      }))
+    }));
+
+    setModifierGroupsState(resolvedGroups);
+
+    const storeId = localStorage.getItem('mino_active_store_id');
+    if (!storeId) return;
+
+    try {
+      const deletedIds = modifierGroups.filter(g => !resolvedGroups.some(rg => rg.id === g.id)).map(g => g.id);
+      if (deletedIds.length > 0) {
+        await supabase.from('modifier_groups').delete().in('id', deletedIds);
+      }
+
+      const changedGroups = resolvedGroups.filter(rg => {
+        const prev = modifierGroups.find(g => g.id === rg.id);
+        return !prev || JSON.stringify(prev) !== JSON.stringify(rg);
+      });
+
+      for (const group of changedGroups) {
+        await supabase.from('modifier_groups').upsert({
+          id: group.id,
+          store_id: storeId,
+          name: { en: group.nameEn || group.name, fr: group.nameFr || group.name, nl: group.nameNl || group.name },
+          min_selection: group.minSelection || 0,
+          max_selection: group.maxSelection || 1,
+          is_required: group.isRequired === true
+        });
+
+        const prevGroup = modifierGroups.find(g => g.id === group.id);
+        const prevOptions = prevGroup?.options || [];
+
+        const deletedOptIds = prevOptions.filter((o: any) => !group.options.some((ro: any) => ro.id === o.id)).map((o: any) => o.id);
+        if (deletedOptIds.length > 0) {
+          await supabase.from('modifier_options').delete().in('id', deletedOptIds);
+        }
+
+        const changedOpts = group.options.filter((ro: any) => {
+          const prev = prevOptions.find((o: any) => o.id === ro.id);
+          return !prev || JSON.stringify(prev) !== JSON.stringify(ro);
+        });
+
+        const { data: foodVatRules } = await supabase
+          .from('vat_rules')
+          .select('id')
+          .eq('category', 'food')
+          .limit(1);
+
+        const foodVatRuleId = foodVatRules?.[0]?.id;
+
+        for (const opt of changedOpts) {
+          if (!foodVatRuleId) continue;
+          await supabase.from('modifier_options').upsert({
+            id: opt.id,
+            modifier_group_id: group.id,
+            name: { en: opt.nameEn || opt.name, fr: opt.nameFr || opt.name, nl: opt.nameNl || opt.name },
+            gross_price: opt.upcharge || 0.00,
+            vat_rule_id: foodVatRuleId
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to sync modifier groups changes to Supabase:', err);
+    }
+  };
+
+  const setDeals = async (action: React.SetStateAction<any[]>) => {
+    const nextDeals = typeof action === 'function' ? action(deals) : action;
+    const resolvedDeals = nextDeals.map(d => ({
+      ...d,
+      id: isUuid(d.id) ? d.id : crypto.randomUUID()
+    }));
+
+    setDealsState(resolvedDeals);
+
+    const storeId = localStorage.getItem('mino_active_store_id');
+    if (!storeId) return;
+
+    try {
+      const deletedIds = deals.filter(d => !resolvedDeals.some(rd => rd.id === d.id)).map(d => d.id);
+      if (deletedIds.length > 0) {
+        await supabase.from('combos').delete().in('id', deletedIds);
+      }
+
+      const changedDeals = resolvedDeals.filter(rd => {
+        const prev = deals.find(d => d.id === rd.id);
+        return !prev || JSON.stringify(prev) !== JSON.stringify(rd);
+      });
+
+      for (const deal of changedDeals) {
+        await supabase.from('combos').upsert({
+          id: deal.id,
+          store_id: storeId,
+          name: { en: deal.nameEn || deal.name, fr: deal.nameFr || deal.name, nl: deal.nameNl || deal.name },
+          fixed_price: deal.fixedPrice,
+          is_available: deal.isAvailable !== false
+        });
+      }
+    } catch (err) {
+      console.error('Failed to sync combo deals changes to Supabase:', err);
+    }
+  };
 
   return (
     <MenuContext.Provider value={{

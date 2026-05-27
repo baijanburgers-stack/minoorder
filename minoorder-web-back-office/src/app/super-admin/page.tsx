@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import '../../styles/globals.css';
+import { supabase } from '@/lib/supabase';
+
 
 interface VatRates {
   foodTakeaway: number;
@@ -123,25 +125,114 @@ export default function CleanSuperAdminPortal() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [storePerformances, setStorePerformances] = useState<StorePerformance[]>([]);
-  const [saHydrated, setSaHydrated] = useState(false);
   const [activeStoreId, setActiveStoreId] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  // ── Hydrate stores from localStorage after mount (SSR-safe) ──────────────
-  useEffect(() => {
+  // Fetch stores and metrics from Supabase
+  const fetchStores = async () => {
     try {
-      const raw = localStorage.getItem('mino_sa_stores');
-      if (raw) setStorePerformances(JSON.parse(raw));
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('stores')
+        .select(`
+          id,
+          tenant_id,
+          name,
+          company_name,
+          vat_number,
+          street,
+          city,
+          postal_code,
+          country,
+          phone,
+          email,
+          theme_settings
+        `);
+
+      if (error) throw error;
+
+      const formatted: StorePerformance[] = await Promise.all((data || []).map(async (s: any) => {
+        // Query active devices for this store
+        const { count: activeDevices } = await supabase
+          .from('devices')
+          .select('id', { count: 'exact', head: true })
+          .eq('store_id', s.id);
+
+        // Fetch VAT rules for this store's country
+        const { data: rules } = await supabase
+          .from('vat_rules')
+          .select('*')
+          .eq('country', s.country);
+
+        const vatRates: VatRates = {
+          foodTakeaway: 6,
+          foodDineIn: 12,
+          softDrinkTakeaway: 6,
+          softDrinkDineIn: 12,
+          alcoholTakeaway: 21,
+          alcoholDineIn: 21
+        };
+
+        rules?.forEach((r: any) => {
+          if (r.category === 'food') {
+            vatRates.foodTakeaway = parseFloat(r.takeaway_rate);
+            vatRates.foodDineIn = parseFloat(r.dine_in_rate);
+          } else if (r.category === 'soft_drink') {
+            vatRates.softDrinkTakeaway = parseFloat(r.takeaway_rate);
+            vatRates.softDrinkDineIn = parseFloat(r.dine_in_rate);
+          } else if (r.category === 'alcohol') {
+            vatRates.alcoholTakeaway = parseFloat(r.takeaway_rate);
+            vatRates.alcoholDineIn = parseFloat(r.dine_in_rate);
+          }
+        });
+
+        // Query sales aggregates from orders table
+        const { data: ordersData } = await supabase
+          .from('orders')
+          .select('total_gross')
+          .eq('store_id', s.id);
+
+        const totalSales = ordersData?.reduce((sum, o) => sum + parseFloat(o.total_gross || 0), 0) || 0;
+
+        return {
+          id: s.id,
+          name: s.name,
+          companyName: s.company_name,
+          vatNumber: s.vat_number,
+          street: s.street,
+          city: s.city,
+          postalCode: s.postal_code,
+          country: s.country,
+          phone: s.phone || '',
+          email: s.email || '',
+          dailySales: totalSales * 0.1, // simulated daily share
+          monthlySales: totalSales,
+          activeDevices: activeDevices || 0,
+          posLimit: 3,
+          kioskLimit: 2,
+          status: 'online',
+          isFdmRequired: s.country === 'BE',
+          fiscalSystem: s.country === 'BE' ? 'BE_FDM' : 'STANDARD',
+          logoUrl: s.theme_settings?.logoUrl || '',
+          vatRates
+        };
+      }));
+
+      setStorePerformances(formatted);
+    } catch (err: any) {
+      console.error('Failed to load stores:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStores();
+    try {
       const aid = localStorage.getItem('mino_active_store_id');
       if (aid) setActiveStoreId(aid);
     } catch {}
-    setSaHydrated(true);
   }, []);
-
-  // ── Persist stores to localStorage whenever they change ──────────────────
-  useEffect(() => {
-    if (!saHydrated) return;
-    try { localStorage.setItem('mino_sa_stores', JSON.stringify(storePerformances)); } catch {}
-  }, [saHydrated, storePerformances]);
 
   // Form states to add new stores
   const [storeName, setStoreName] = useState('');
@@ -312,7 +403,7 @@ export default function CleanSuperAdminPortal() {
     return matched ? matched.placeholder : 'BE 0741.982.634';
   };
 
-  const handleAddStoreSubmit = (e: React.FormEvent) => {
+  const handleAddStoreSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!logoUrl) {
       alert('Store Brand Logo is mandatory! Please upload a brand logo from your PC.');
@@ -327,74 +418,88 @@ export default function CleanSuperAdminPortal() {
       return;
     }
 
-    const newStore: StorePerformance = {
-      id: Date.now().toString(),
-      name: storeName,
-      companyName,
-      vatNumber,
-      street,
-      city,
-      postalCode,
-      country,
-      phone,
-      email,
-      dailySales: 0,
-      monthlySales: 0,
-      activeDevices: 0,
-      posLimit: parseInt(posLimit),
-      kioskLimit: parseInt(kioskLimit),
-      status: 'online',
-      isFdmRequired,
-      fiscalSystem,
-      fiscalApiKey: isFdmRequired ? fiscalApiKey : '',
-      logoUrl: logoUrl,
-      adminEmail: adminEmail,
-      vatRates: {
-        foodTakeaway: parseFloat(foodTakeaway),
-        foodDineIn: parseFloat(foodDineIn),
-        softDrinkTakeaway: parseFloat(softTakeaway),
-        softDrinkDineIn: parseFloat(softDineIn),
-        alcoholTakeaway: parseFloat(alcoholTakeaway),
-        alcoholDineIn: parseFloat(alcoholDineIn),
-      }
-    };
-
-    setStorePerformances([...storePerformances, newStore]);
-
-    // ── Wire VAT rates to Store Admin localStorage ────────────────────────
+    setIsLoading(true);
     try {
-      localStorage.setItem('mino_vat_rates', JSON.stringify(newStore.vatRates));
-      localStorage.setItem('mino_active_store_id', newStore.id);
-      localStorage.setItem('mino_active_store_name', newStore.name);
-    } catch {}
-    
-    // Beautiful alert confirmation showing provisioned credentials
-    alert(`Store Node Deployed Successfully!\n\nStore Admin Account Registered:\nUser: ${adminEmail}\nPass: ${adminPassword}\n\nPlease share these credentials securely with the Store Admin.`);
-    
-    setIsModalOpen(false); // Close comprehensive modal
+      const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
 
-    // Clear form fields
-    setStoreName('');
-    setCompanyName('');
-    setVatNumber('BE ');
-    setStreet('');
-    setCity('');
-    setPostalCode('');
-    setPhone('');
-    setEmail('');
-    setPosLimit('3');
-    setKioskLimit('2');
-    setFiscalSystem('BE_FDM');
-    setFiscalApiKey('');
-    setLogoUrl('');
-    setAdminName('');
-    setAdminEmail('');
-    setAdminPassword('');
-    setCountry('BE');
-    setIsFdmRequired(true);
-    setFoodTakeaway('6.00'); setFoodDineIn('12.00');
-    setSoftTakeaway('6.00'); setSoftDineIn('12.00');
-    setAlcoholTakeaway('21.00'); setAlcoholDineIn('21.00');
+      if (sessionErr || !token) {
+        throw new Error('No active administrator authentication session found. Please log in again.');
+      }
+
+      const res = await fetch('/api/create-store', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          storeName,
+          companyName,
+          vatNumber,
+          street,
+          city,
+          postalCode,
+          country,
+          phone,
+          email,
+          posLimit: parseInt(posLimit),
+          kioskLimit: parseInt(kioskLimit),
+          fiscalSystem,
+          isFdmRequired,
+          fiscalApiKey,
+          logoUrl,
+          adminEmail,
+          adminPassword,
+          vatRates: {
+            foodTakeaway: parseFloat(foodTakeaway),
+            foodDineIn: parseFloat(foodDineIn),
+            softDrinkTakeaway: parseFloat(softTakeaway),
+            softDrinkDineIn: parseFloat(softDineIn),
+            alcoholTakeaway: parseFloat(alcoholTakeaway),
+            alcoholDineIn: parseFloat(alcoholDineIn),
+          }
+        })
+      });
+
+      const resJson = await res.json();
+      if (!res.ok) {
+        throw new Error(resJson.error || 'Failed to deploy store node configuration.');
+      }
+
+      // Beautiful alert confirmation showing provisioned credentials
+      alert(`Store Node Deployed Successfully!\n\nStore Admin Account Registered:\nUser: ${adminEmail}\nPass: ${adminPassword}\n\nPlease share these credentials securely with the Store Admin.`);
+      
+      setIsModalOpen(false); // Close modal
+      await fetchStores(); // Refresh stores list live from Supabase
+
+      // Clear form fields
+      setStoreName('');
+      setCompanyName('');
+      setVatNumber('BE ');
+      setStreet('');
+      setCity('');
+      setPostalCode('');
+      setPhone('');
+      setEmail('');
+      setPosLimit('3');
+      setKioskLimit('2');
+      setFiscalSystem('BE_FDM');
+      setFiscalApiKey('');
+      setLogoUrl('');
+      setAdminName('');
+      setAdminEmail('');
+      setAdminPassword('');
+      setCountry('BE');
+      setIsFdmRequired(true);
+      setFoodTakeaway('6.00'); setFoodDineIn('12.00');
+      setSoftTakeaway('6.00'); setSoftDineIn('12.00');
+      setAlcoholTakeaway('21.00'); setAlcoholDineIn('21.00');
+    } catch (err: any) {
+      alert(`Store Deployment Failed: ${err?.message || 'Unknown network error'}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleEditCountryChange = (selectedCountry: string) => {
@@ -471,7 +576,7 @@ export default function CleanSuperAdminPortal() {
     setIsEditModalOpen(true);
   };
 
-  const handleEditStoreSubmit = (e: React.FormEvent) => {
+  const handleEditStoreSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStore || !editStoreName || !editCompanyName || !editVatNumber || !editCity) return;
 
@@ -484,38 +589,67 @@ export default function CleanSuperAdminPortal() {
       alcoholDineIn: parseFloat(editAlcoholDineIn),
     };
 
-    setStorePerformances(storePerformances.map(store => {
-      if (store.id === editingStore.id) {
-        return {
-          ...store,
+    setIsLoading(true);
+    try {
+      // 1. Update store in Supabase
+      const { error: storeErr } = await supabase
+        .from('stores')
+        .update({
           name: editStoreName,
-          companyName: editCompanyName,
-          vatNumber: editVatNumber,
+          company_name: editCompanyName,
+          vat_number: editVatNumber,
           street: editStreet,
           city: editCity,
-          postalCode: editPostalCode,
+          postal_code: editPostalCode,
           country: editCountry,
           phone: editPhone,
           email: editEmail,
-          posLimit: parseInt(editPosLimit),
-          kioskLimit: parseInt(editKioskLimit),
-          fiscalSystem: editFiscalSystem,
-          isFdmRequired: editIsFdmRequired,
-          fiscalApiKey: editIsFdmRequired ? editFiscalApiKey : '',
-          logoUrl: editLogoUrl,
-          vatRates: updatedRates,
-        };
+          theme_settings: { logoUrl: editLogoUrl }
+        })
+        .eq('id', editingStore.id);
+
+      if (storeErr) throw storeErr;
+
+      // 2. Update VAT rules in Supabase
+      const categoriesList = ['food', 'soft_drink', 'alcohol'] as const;
+      const ratesMapping = {
+        food: { takeaway: updatedRates.foodTakeaway, dineIn: updatedRates.foodDineIn },
+        soft_drink: { takeaway: updatedRates.softDrinkTakeaway, dineIn: updatedRates.softDrinkDineIn },
+        alcohol: { takeaway: updatedRates.alcoholTakeaway, dineIn: updatedRates.alcoholDineIn }
+      };
+
+      for (const cat of categoriesList) {
+        const rate = ratesMapping[cat];
+        const { error: ruleErr } = await supabase
+          .from('vat_rules')
+          .upsert({
+            country: editCountry,
+            category: cat,
+            takeaway_rate: rate.takeaway,
+            dine_in_rate: rate.dineIn,
+            description: `${editCountry} standard ${cat} VAT rates`
+          }, { onConflict: 'country,category' });
+
+        if (ruleErr) throw ruleErr;
       }
-      return store;
-    }));
 
-    // ── Wire updated VAT rates to Store Admin localStorage ────────────────
-    if (editingStore.id === localStorage.getItem('mino_active_store_id')) {
-      try { localStorage.setItem('mino_vat_rates', JSON.stringify(updatedRates)); } catch {}
+      // 3. Update localStorage if editing current active store
+      if (editingStore.id === localStorage.getItem('mino_active_store_id')) {
+        try {
+          localStorage.setItem('mino_vat_rates', JSON.stringify(updatedRates));
+          localStorage.setItem('mino_active_store_name', editStoreName);
+        } catch {}
+      }
+
+      alert('Store details and tax compliance rules updated successfully!');
+      setIsEditModalOpen(false);
+      setEditingStore(null);
+      await fetchStores(); // Refresh from Supabase
+    } catch (err: any) {
+      alert(`Update Failed: ${err?.message || 'Unknown network error'}`);
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsEditModalOpen(false);
-    setEditingStore(null);
   };
 
   const handleToggleStatus = (id: string) => {
@@ -2181,7 +2315,8 @@ export default function CleanSuperAdminPortal() {
               </button>
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
+                  await supabase.auth.signOut();
                   window.location.href = '/';
                 }}
                 style={{

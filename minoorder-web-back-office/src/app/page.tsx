@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { supabase } from '@/lib/supabase';
 
 export default function LandingLoginPage() {
   const [email, setEmail] = useState('');
@@ -11,16 +12,7 @@ export default function LandingLoginPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Auto-fill test credentials helper
-  const autofillCredentials = (role: 'super' | 'store', emailVal: string, passVal: string) => {
-    setSelectedPortal(role);
-    setEmail(emailVal);
-    setPassword(passVal);
-    setErrorMsg('');
-    setSuccessMsg('');
-  };
-
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       setErrorMsg('Please provide both your registered email and secure password.');
@@ -31,42 +23,82 @@ export default function LandingLoginPage() {
     setErrorMsg('');
     setSuccessMsg('');
     
-    // Simulate highly premium secure credentials decoding & token verification
-    setTimeout(() => {
-      const lowerEmail = email.toLowerCase();
-      if (selectedPortal === 'super') {
-        const isSuperAdmin = (lowerEmail === 'admin@platepixles.com' || lowerEmail === 'admin@platepixels.com');
-        // Allow any password for local dev testing to maximize efficiency
-        if (isSuperAdmin) {
-          setSuccessMsg('System Decrypted. Loading PlatePixels Master Console...');
-          setTimeout(() => {
-            window.location.href = '/super-admin';
-          }, 1000);
-        } else {
-          setIsLoading(false);
-          setErrorMsg('Invalid Master Admin signature. Please verify credentials.');
-        }
-      } else {
-        // Store Admin simulation accepts our mapped test store emails or any valid email during simulation
-        const allowedEmails = [
-          'hq@platepixles.com', 'hq@platepixels.com',
-          'center@burgerhub.be', 'munich@burgerhub.de', 'marais@leparisien.fr', 
-          'manager@restaurant.com'
-        ];
-        const isValidEmail = lowerEmail.includes('@') && lowerEmail.length > 5;
-        if (allowedEmails.includes(lowerEmail) || isValidEmail) {
-          setSuccessMsg('Authorization Token verified. Decrypting Store Catalog...');
-          setTimeout(() => {
-            window.location.href = '/store-admin/menu';
-          }, 1000);
-        } else {
-          setIsLoading(false);
-          setErrorMsg('No active store licensing bounds found for this email address.');
-        }
-      }
-    }, 1200);
-  };
+    try {
+      // 1. Authenticate user via Supabase Auth
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password
+      });
 
+      if (authError || !data?.session) {
+        throw new Error(authError?.message || 'Authentication failed. Please verify your email and password.');
+      }
+
+      // 2. Fetch mapped store and role from database
+      const { data: storeUser, error: roleError } = await supabase
+        .from('store_users')
+        .select(`
+          role,
+          store_id,
+          stores (
+            name
+          )
+        `)
+        .eq('user_id', data.session.user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (roleError) {
+        throw new Error(`Authorization check failed: ${roleError.message}`);
+      }
+
+      if (!storeUser) {
+        await supabase.auth.signOut();
+        throw new Error('Access Denied: No active business licensing mapped for this account.');
+      }
+
+      const assignedStoreId = storeUser.store_id;
+      const assignedStoreName = (storeUser.stores as any)?.name || 'Operations Store';
+
+      // 3. Process routing depending on role and selected toggle portal
+      if (storeUser.role === 'super_admin') {
+        if (selectedPortal !== 'super') {
+          await supabase.auth.signOut();
+          throw new Error('Access Denied: Super Admin accounts must authenticate via "PlatePixels Admin" portal.');
+        }
+        
+        // Save general corporate context details
+        localStorage.setItem('mino_active_store_id', assignedStoreId);
+        localStorage.setItem('mino_active_store_name', assignedStoreName);
+        
+        setSuccessMsg('System Decrypted. Loading PlatePixels Master Console...');
+        setTimeout(() => {
+          window.location.href = '/super-admin';
+        }, 1000);
+      } else if (storeUser.role === 'store_admin') {
+        if (selectedPortal !== 'store') {
+          await supabase.auth.signOut();
+          throw new Error('Access Denied: Store Admin accounts must authenticate via "Store Operator" portal.');
+        }
+
+        // Save active store context details for the store admin screens
+        localStorage.setItem('mino_active_store_id', assignedStoreId);
+        localStorage.setItem('mino_active_store_name', assignedStoreName);
+
+        setSuccessMsg('Authorization Token verified. Decrypting Store Catalog...');
+        setTimeout(() => {
+          window.location.href = '/store-admin/menu';
+        }, 1000);
+      } else {
+        // Staff/Devices roles are restricted from accessing web portal
+        await supabase.auth.signOut();
+        throw new Error(`Access Denied: Staff role "${storeUser.role}" must authenticate on physical POS or Kiosk terminals.`);
+      }
+    } catch (err: any) {
+      setIsLoading(false);
+      setErrorMsg(err?.message || 'An unexpected connection error occurred.');
+    }
+  };
 
   return (
     <div style={{
@@ -295,7 +327,9 @@ export default function LandingLoginPage() {
                     fontSize: '0.9rem',
                     background: 'rgba(255, 255, 255, 0.025)',
                     borderColor: 'rgba(255, 255, 255, 0.07)',
-                    borderRadius: '12px'
+                    borderRadius: '12px',
+                    width: '100%',
+                    boxSizing: 'border-box'
                   }}
                 />
               </div>
@@ -357,7 +391,9 @@ export default function LandingLoginPage() {
                     fontSize: '0.9rem',
                     background: 'rgba(255, 255, 255, 0.025)',
                     borderColor: 'rgba(255, 255, 255, 0.07)',
-                    borderRadius: '12px'
+                    borderRadius: '12px',
+                    width: '100%',
+                    boxSizing: 'border-box'
                   }}
                 />
               </div>
@@ -376,7 +412,10 @@ export default function LandingLoginPage() {
                 borderRadius: '12px',
                 fontSize: '0.88rem',
                 fontWeight: 700,
-                boxShadow: '0 8px 24px rgba(99, 102, 241, 0.35)'
+                boxShadow: '0 8px 24px rgba(99, 102, 241, 0.35)',
+                cursor: 'pointer',
+                border: 'none',
+                color: '#fff'
               }}
               disabled={isLoading}
             >
@@ -397,90 +436,6 @@ export default function LandingLoginPage() {
               )}
             </button>
           </form>
-
-          {/* Quick-Fill demo action pills */}
-          <div style={{ 
-            marginTop: '24px', 
-            borderTop: '1px solid rgba(255, 255, 255, 0.06)', 
-            paddingTop: '20px',
-            textAlign: 'center' 
-          }}>
-            <p style={{ 
-              fontSize: '0.72rem', 
-              color: 'var(--text-muted)', 
-              textTransform: 'uppercase', 
-              letterSpacing: '0.08em', 
-              fontWeight: 600,
-              marginBottom: '12px'
-            }}>
-              Quick Sign-In
-            </p>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
-              <button
-                type="button"
-                onClick={() => autofillCredentials('super', 'admin@platepixles.com', 'PlatePixelsAdmin2026!')}
-                style={{
-                  background: 'rgba(99, 102, 241, 0.08)',
-                  border: '1px solid rgba(99, 102, 241, 0.2)',
-                  borderRadius: '100px',
-                  padding: '7px 16px',
-                  fontSize: '0.75rem',
-                  color: '#a5b4fc',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  transition: 'var(--transition-smooth)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px'
-                }}
-                className="demo-pill"
-              >
-                👑 Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => autofillCredentials('store', 'center@burgerhub.be', 'any-password')}
-                style={{
-                  background: 'rgba(16, 185, 129, 0.08)',
-                  border: '1px solid rgba(16, 185, 129, 0.2)',
-                  borderRadius: '100px',
-                  padding: '7px 16px',
-                  fontSize: '0.75rem',
-                  color: '#a7f3d0',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  transition: 'var(--transition-smooth)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px'
-                }}
-                className="demo-pill"
-              >
-                🍔 BE Store
-              </button>
-              <button
-                type="button"
-                onClick={() => autofillCredentials('store', 'marais@leparisien.fr', 'any-password')}
-                style={{
-                  background: 'rgba(245, 158, 11, 0.08)',
-                  border: '1px solid rgba(245, 158, 11, 0.2)',
-                  borderRadius: '100px',
-                  padding: '7px 16px',
-                  fontSize: '0.75rem',
-                  color: '#fde68a',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  transition: 'var(--transition-smooth)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px'
-                }}
-                className="demo-pill"
-              >
-                🥐 FR Store
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Global audit disclaimer */}
@@ -506,15 +461,6 @@ export default function LandingLoginPage() {
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(-4px); }
           to { opacity: 1; transform: translateY(0); }
-        }
-        .demo-pill:hover {
-          background: rgba(255, 255, 255, 0.1) !important;
-          border-color: rgba(255, 255, 255, 0.25) !important;
-          color: #ffffff !important;
-          transform: translateY(-1px);
-        }
-        .demo-pill:active {
-          transform: translateY(0);
         }
         /* Login page input placeholder styling */
         .form-input::placeholder {
