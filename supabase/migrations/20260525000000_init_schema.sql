@@ -480,3 +480,109 @@ using (
           and devices.store_id = store_id
     )
 );
+
+-- =============================================================
+-- RLS POLICY PATCH: UNBLOCKING STORES, CATEGORIES & DEVICES
+-- =============================================================
+
+-- 1. store_users table select policy
+create policy "Allow users to read their own mappings" 
+on store_users for select 
+to authenticated 
+using ( user_id = auth.uid() );
+
+-- 2. categories table policies
+create policy "Allow store staff to view categories" 
+on categories for select 
+to authenticated
+using (
+  exists (
+    select 1 from store_users 
+    where store_users.store_id = categories.store_id 
+      and store_users.user_id = auth.uid()
+  )
+);
+
+create policy "Allow store admins to manage categories" 
+on categories for all 
+to authenticated
+using ( get_user_role_for_store(store_id) = 'store_admin' );
+
+-- 3. devices table policies
+create policy "Allow store staff to view devices" 
+on devices for select 
+to authenticated
+using (
+  exists (
+    select 1 from store_users 
+    where store_users.store_id = devices.store_id 
+      and store_users.user_id = auth.uid()
+  )
+);
+
+create policy "Allow store admins to manage devices" 
+on devices for all 
+to authenticated
+using ( get_user_role_for_store(store_id) = 'store_admin' );
+
+-- 4. order_lines table policies
+create policy "Allow store staff to view order lines" 
+on order_lines for select 
+to authenticated
+using (
+  exists (
+    select 1 from orders 
+    where orders.id = order_lines.order_id 
+      and exists (
+        select 1 from store_users 
+        where store_users.store_id = orders.store_id 
+          and store_users.user_id = auth.uid()
+      )
+  )
+);
+
+create policy "Allow store staff to insert order lines" 
+on order_lines for insert 
+to authenticated
+with check (
+  exists (
+    select 1 from orders 
+    where orders.id = order_id 
+      and exists (
+        select 1 from store_users 
+        where store_users.store_id = orders.store_id 
+          and store_users.user_id = auth.uid()
+      )
+  )
+);
+
+-- 5. payments table policies
+create policy "Allow store staff to view payments" 
+on payments for select 
+to authenticated
+using (
+  exists (
+    select 1 from orders 
+    where orders.id = payments.order_id 
+      and exists (
+        select 1 from store_users 
+        where store_users.store_id = orders.store_id 
+          and store_users.user_id = auth.uid()
+      )
+  )
+);
+
+create policy "Allow store staff to insert payments" 
+on payments for insert 
+to authenticated
+with check (
+  exists (
+    select 1 from orders 
+    where orders.id = order_id 
+      and exists (
+        select 1 from store_users 
+        where store_users.store_id = orders.store_id 
+          and store_users.user_id = auth.uid()
+      )
+  )
+);
