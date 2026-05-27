@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd minoorder-web-back-office && npm install && npm run build",
+  "outputDirectory": "minoorder-web-back-office/.next",
+  "installCommand": "echo 'skip'"
+}
