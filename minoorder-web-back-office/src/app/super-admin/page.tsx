@@ -1818,8 +1818,18 @@ export default function CleanSuperAdminPortal() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary" style={{ padding: '12px 32px', fontSize: '0.875rem' }}>
-                  Deploy Store Node
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={isLoading}
+                  style={{
+                    padding: '12px 32px',
+                    fontSize: '0.875rem',
+                    opacity: isLoading ? 0.7 : 1,
+                    cursor: isLoading ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {isLoading ? 'Deploying...' : 'Deploy Store Node'}
                 </button>
               </div>
 
@@ -2235,8 +2245,18 @@ export default function CleanSuperAdminPortal() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary" style={{ padding: '12px 32px', fontSize: '0.875rem' }}>
-                  Save Changes
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={isLoading}
+                  style={{
+                    padding: '12px 32px',
+                    fontSize: '0.875rem',
+                    opacity: isLoading ? 0.7 : 1,
+                    cursor: isLoading ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {isLoading ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
 
