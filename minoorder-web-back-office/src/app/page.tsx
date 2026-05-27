@@ -114,26 +114,26 @@ export default function LandingLoginPage() {
       {/* Central Login Card Container */}
       <div style={{
         width: '100%',
-        maxWidth: '460px',
+        maxWidth: '480px',
         zIndex: 1,
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
-        gap: '24px'
+        gap: '28px'
       }}>
         {/* Upper Logo branding */}
         <div style={{ textAlign: 'center' }}>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '4px', letterSpacing: '-0.03em' }}>
+          <h1 style={{ fontSize: '2.6rem', fontWeight: 800, marginBottom: '6px', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
             <span className="text-gradient">Mino</span>Order
           </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 700 }}>
-            ⚡ Enterprise Restaurant Gateway
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
+            Enterprise Restaurant Gateway
           </p>
         </div>
 
         {/* Dynamic Dual-Login Card wrapper */}
         <div className="glass-card" style={{ 
-          padding: '40px 32px 32px 32px', 
+          padding: '36px 32px 32px 32px', 
           width: '100%', 
           background: 'rgba(11, 15, 25, 0.75)',
           border: '1px solid rgba(255, 255, 255, 0.08)',
@@ -143,12 +143,13 @@ export default function LandingLoginPage() {
           {/* Dual Toggle Pill Switcher */}
           <div style={{
             display: 'flex',
-            background: 'rgba(255, 255, 255, 0.02)',
-            borderRadius: '16px',
-            padding: '5px',
-            marginBottom: '32px',
+            background: 'rgba(255, 255, 255, 0.03)',
+            borderRadius: '14px',
+            padding: '4px',
+            marginBottom: '28px',
             border: '1px solid rgba(255, 255, 255, 0.06)',
-            position: 'relative'
+            position: 'relative',
+            gap: '4px'
           }}>
             <button
               type="button"
@@ -161,15 +162,16 @@ export default function LandingLoginPage() {
                 flex: 1,
                 background: selectedPortal === 'store' ? 'linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%)' : 'transparent',
                 border: 'none',
-                borderRadius: '12px',
+                borderRadius: '11px',
                 color: selectedPortal === 'store' ? '#ffffff' : 'var(--text-secondary)',
-                padding: '12px 10px',
+                padding: '13px 16px',
                 fontFamily: 'var(--font-display)',
-                fontWeight: 600,
-                fontSize: '0.85rem',
+                fontWeight: 700,
+                fontSize: '0.88rem',
                 cursor: 'pointer',
                 transition: 'var(--transition-smooth)',
-                boxShadow: selectedPortal === 'store' ? '0 4px 12px rgba(99, 102, 241, 0.3)' : 'none'
+                boxShadow: selectedPortal === 'store' ? '0 4px 14px rgba(99, 102, 241, 0.3)' : 'none',
+                letterSpacing: '0.01em'
               }}
             >
               💼 Store Operator
@@ -185,29 +187,30 @@ export default function LandingLoginPage() {
                 flex: 1,
                 background: selectedPortal === 'super' ? 'linear-gradient(135deg, var(--primary) 0%, #4f46e5 100%)' : 'transparent',
                 border: 'none',
-                borderRadius: '12px',
+                borderRadius: '11px',
                 color: selectedPortal === 'super' ? '#ffffff' : 'var(--text-secondary)',
-                padding: '12px 10px',
+                padding: '13px 16px',
                 fontFamily: 'var(--font-display)',
-                fontWeight: 600,
-                fontSize: '0.85rem',
+                fontWeight: 700,
+                fontSize: '0.88rem',
                 cursor: 'pointer',
                 transition: 'var(--transition-smooth)',
-                boxShadow: selectedPortal === 'super' ? '0 4px 12px rgba(99, 102, 241, 0.3)' : 'none'
+                boxShadow: selectedPortal === 'super' ? '0 4px 14px rgba(99, 102, 241, 0.3)' : 'none',
+                letterSpacing: '0.01em'
               }}
             >
               👑 PlatePixels Admin
             </button>
           </div>
 
-          <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-            <h3 style={{ fontSize: '1.25rem', marginBottom: '8px', fontWeight: 700, fontFamily: 'var(--font-display)' }}>
-              {selectedPortal === 'super' ? 'PlatePixels Master Console' : 'Restaurant Operations Portal'}
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <h3 style={{ fontSize: '1.15rem', marginBottom: '6px', fontWeight: 700, fontFamily: 'var(--font-display)', letterSpacing: '-0.01em' }}>
+              {selectedPortal === 'super' ? 'Master Console' : 'Operations Portal'}
             </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', lineHeight: 1.5 }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', lineHeight: 1.6, maxWidth: '320px', margin: '0 auto' }}>
               {selectedPortal === 'super' 
-                ? 'Input cryptographically verified credentials to decrypt root global settings.' 
-                : 'Authenticate store managers or cashier session licenses.'}
+                ? 'Sign in with your admin credentials to access global settings.' 
+                : 'Sign in to manage your store menu, orders & settings.'}
             </p>
           </div>
 
@@ -253,59 +256,61 @@ export default function LandingLoginPage() {
 
           <form onSubmit={handleLogin}>
             {/* Registered Email */}
-            <div style={{ marginBottom: '20px' }}>
+            <div style={{ marginBottom: '18px' }}>
               <label style={{ 
                 display: 'block', 
-                fontSize: '0.75rem', 
+                fontSize: '0.78rem', 
                 color: 'var(--text-secondary)', 
                 marginBottom: '8px', 
-                fontWeight: 700, 
-                textTransform: 'uppercase', 
-                letterSpacing: '0.06em' 
+                fontWeight: 600, 
+                letterSpacing: '0.02em' 
               }}>
-                Operational Email Address
+                Email Address
               </label>
               <div style={{ position: 'relative' }}>
                 <span style={{
                   position: 'absolute',
-                  left: '16px',
+                  left: '14px',
                   top: '50%',
                   transform: 'translateY(-50%)',
                   color: 'var(--text-muted)',
-                  fontSize: '0.95rem',
-                  pointerEvents: 'none'
+                  fontSize: '1rem',
+                  pointerEvents: 'none',
+                  opacity: 0.7
                 }}>
                   📧
                 </span>
                 <input
                   type="email"
                   className="form-input"
-                  placeholder={selectedPortal === 'super' ? 'admin@platepixles.com' : 'manager@restaurant.com'}
+                  placeholder={selectedPortal === 'super' ? 'admin@platepixels.com' : 'manager@restaurant.com'}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading}
                   required
                   style={{
                     paddingLeft: '44px',
-                    fontSize: '0.92rem',
-                    background: 'rgba(255, 255, 255, 0.02)',
-                    borderColor: 'rgba(255, 255, 255, 0.06)'
+                    paddingTop: '13px',
+                    paddingBottom: '13px',
+                    fontSize: '0.9rem',
+                    background: 'rgba(255, 255, 255, 0.025)',
+                    borderColor: 'rgba(255, 255, 255, 0.07)',
+                    borderRadius: '12px'
                   }}
                 />
               </div>
             </div>
 
             {/* Access Password */}
-            <div style={{ marginBottom: '28px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <label style={{ 
-                  fontSize: '0.75rem', 
+                  fontSize: '0.78rem', 
                   color: 'var(--text-secondary)', 
-                  fontWeight: 700, 
-                  textTransform: 'uppercase', 
-                  letterSpacing: '0.06em' 
+                  fontWeight: 600, 
+                  letterSpacing: '0.02em' 
                 }}>
-                  Secure Password / Token
+                  Password
                 </label>
                 <button
                   type="button"
@@ -316,8 +321,9 @@ export default function LandingLoginPage() {
                     fontSize: '0.75rem',
                     color: 'var(--primary)',
                     cursor: 'pointer',
-                    fontWeight: 700,
-                    transition: 'var(--transition-smooth)'
+                    fontWeight: 600,
+                    transition: 'var(--transition-smooth)',
+                    padding: '2px 4px'
                   }}
                 >
                   {showPassword ? '🫣 Hide' : '👁️ Show'}
@@ -326,28 +332,32 @@ export default function LandingLoginPage() {
               <div style={{ position: 'relative' }}>
                 <span style={{
                   position: 'absolute',
-                  left: '16px',
+                  left: '14px',
                   top: '50%',
                   transform: 'translateY(-50%)',
                   color: 'var(--text-muted)',
-                  fontSize: '0.95rem',
-                  pointerEvents: 'none'
+                  fontSize: '1rem',
+                  pointerEvents: 'none',
+                  opacity: 0.7
                 }}>
                   🔒
                 </span>
                 <input
                   type={showPassword ? 'text' : 'password'}
                   className="form-input"
-                  placeholder="••••••••••••"
+                  placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
                   required
                   style={{
                     paddingLeft: '44px',
-                    fontSize: '0.92rem',
-                    background: 'rgba(255, 255, 255, 0.02)',
-                    borderColor: 'rgba(255, 255, 255, 0.06)'
+                    paddingTop: '13px',
+                    paddingBottom: '13px',
+                    fontSize: '0.9rem',
+                    background: 'rgba(255, 255, 255, 0.025)',
+                    borderColor: 'rgba(255, 255, 255, 0.07)',
+                    borderRadius: '12px'
                   }}
                 />
               </div>
@@ -358,12 +368,14 @@ export default function LandingLoginPage() {
               className="btn-primary"
               style={{ 
                 width: '100%', 
-                padding: '15px', 
+                padding: '14px', 
                 display: 'flex', 
                 justifyContent: 'center', 
                 alignItems: 'center', 
                 gap: '10px',
-                borderRadius: '14px',
+                borderRadius: '12px',
+                fontSize: '0.88rem',
+                fontWeight: 700,
                 boxShadow: '0 8px 24px rgba(99, 102, 241, 0.35)'
               }}
               disabled={isLoading}
@@ -378,19 +390,19 @@ export default function LandingLoginPage() {
                     borderRadius: '50%',
                     animation: 'spin 0.8s linear infinite'
                   }} />
-                  Verifying Token...
+                  Signing in...
                 </>
               ) : (
-                'Decrypt & Authorize'
+                'Sign In'
               )}
             </button>
           </form>
 
           {/* Quick-Fill demo action pills */}
           <div style={{ 
-            marginTop: '28px', 
+            marginTop: '24px', 
             borderTop: '1px solid rgba(255, 255, 255, 0.06)', 
-            paddingTop: '24px',
+            paddingTop: '20px',
             textAlign: 'center' 
           }}>
             <p style={{ 
@@ -398,10 +410,10 @@ export default function LandingLoginPage() {
               color: 'var(--text-muted)', 
               textTransform: 'uppercase', 
               letterSpacing: '0.08em', 
-              fontWeight: 700,
+              fontWeight: 600,
               marginBottom: '12px'
             }}>
-              ⚡ Quick Sign-In For Testing
+              Quick Sign-In
             </p>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
               <button
@@ -411,15 +423,15 @@ export default function LandingLoginPage() {
                   background: 'rgba(99, 102, 241, 0.08)',
                   border: '1px solid rgba(99, 102, 241, 0.2)',
                   borderRadius: '100px',
-                  padding: '6px 14px',
-                  fontSize: '0.72rem',
+                  padding: '7px 16px',
+                  fontSize: '0.75rem',
                   color: '#a5b4fc',
                   cursor: 'pointer',
                   fontWeight: 600,
                   transition: 'var(--transition-smooth)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '4px'
+                  gap: '5px'
                 }}
                 className="demo-pill"
               >
@@ -432,15 +444,15 @@ export default function LandingLoginPage() {
                   background: 'rgba(16, 185, 129, 0.08)',
                   border: '1px solid rgba(16, 185, 129, 0.2)',
                   borderRadius: '100px',
-                  padding: '6px 14px',
-                  fontSize: '0.72rem',
+                  padding: '7px 16px',
+                  fontSize: '0.75rem',
                   color: '#a7f3d0',
                   cursor: 'pointer',
                   fontWeight: 600,
                   transition: 'var(--transition-smooth)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '4px'
+                  gap: '5px'
                 }}
                 className="demo-pill"
               >
@@ -453,15 +465,15 @@ export default function LandingLoginPage() {
                   background: 'rgba(245, 158, 11, 0.08)',
                   border: '1px solid rgba(245, 158, 11, 0.2)',
                   borderRadius: '100px',
-                  padding: '6px 14px',
-                  fontSize: '0.72rem',
+                  padding: '7px 16px',
+                  fontSize: '0.75rem',
                   color: '#fde68a',
                   cursor: 'pointer',
                   fontWeight: 600,
                   transition: 'var(--transition-smooth)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '4px'
+                  gap: '5px'
                 }}
                 className="demo-pill"
               >
@@ -503,6 +515,15 @@ export default function LandingLoginPage() {
         }
         .demo-pill:active {
           transform: translateY(0);
+        }
+        /* Login page input placeholder styling */
+        .form-input::placeholder {
+          color: rgba(156, 163, 175, 0.45);
+          font-weight: 400;
+          letter-spacing: 0.01em;
+        }
+        .form-input:focus::placeholder {
+          color: rgba(156, 163, 175, 0.25);
         }
       `}</style>
     </div>
